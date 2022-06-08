@@ -80,7 +80,6 @@ client = Socrata(data_link, app_token)
 # permitted off-street parking in the manhattan core (zr 13-10) and long island city area (zr 16-10)
 # requirements where group parking facilities are provided (zr 25-23)
 # modification of requirements for small zoning lots (zr 25-24)
-# waiver of requirements for small number of spaces (zr 25-26)
 
 reslots_df = pd.read_csv(path + 'input/reslots.csv', dtype = str)
 
@@ -116,16 +115,18 @@ req_df = pd.read_csv(path + 'input/requiredparking.csv')
 
 # get required parking spaces 
 def get_parking (df):
-    if (df['mnc'] == True) | (df['lic'] == True): # zr 13-10, zr 16-10
+    if (df['mnc'] == True) | (df['lic'] == True): # zr 13-10, 16-10
         spaces = 0
-    elif df['small10k'] == True:
+    elif df['small10k'] == True: # zr 25-24
         spaces = df['units'] * req_df['small10k']
-    elif df['small15k'] == True:
+    elif df['small15k'] == True: # zr 25-24
         spaces = df['units'] * req_df['small15k']
-    else:
+    else: # zr 25-23
         spaces = df['units'] * req_df['standard']
     return spaces
 
 #%% Effective Parking: Spaces Waived 
+
+# waiver of requirements for small number of spaces (zr 25-26)
 
 #%% Actual Parking
