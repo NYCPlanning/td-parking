@@ -9,11 +9,9 @@ Last Modified: June 2022
 """
 
 import pandas as pd
-import geopandas as gpd 
 from sodapy import Socrata
 import os
 import numpy as np 
-import matplotlib.pyplot as plt
 
 path = 'C:/Users/M_Free/Desktop/td-parking/waivers/'
 local_path = 'C:/Users/M_Free/OneDrive - NYC O365 HOSTED/Projects/'
@@ -65,8 +63,10 @@ client = Socrata(data_link, app_token)
 # pluto_df = pd.DataFrame.from_records(results)
 
 # cols = ['bbl', 
-#         'lotarea',  
-#         'lotfront']
+#         'lotarea',
+#         'lotfront',
+#         'lottype',
+#         'bldgclass']
 
 # pluto_df = pluto_df[cols]
 
@@ -79,54 +79,83 @@ client = Socrata(data_link, app_token)
 
 # permitted off-street parking in the manhattan core (zr 13-10) and long island city area (zr 16-10)
 # requirements where group parking facilities are provided (zr 25-23)
-# modification of requirements for small zoning lots (zr 25-24)
+# reduced requirements for small zoning lots (zr 25-241)
 
 reslots_df = pd.read_csv(path + 'input/reslots.csv', dtype = str)
+reslots_df[['units', 'lotarea', 'lotfront']] = reslots_df[['units', 'lotarea', 'lotfront']].astype(float)
 
-# determine if lot is the manhattan core, ... 
+# determine if lot is...
+
+# in the manhattan core or long island city area
 mnc_li = ['101','102', '103', '104', '105', '106', '107', '108'] 
-reslots_df['mnc'] = reslots_df['cd'].isin(mnc_li)
-
-# ... the long island city area, 
 lic_li = pd.read_csv(path + 'input/lic_bbl.csv', dtype = str).loc[:,'bbl'] # gis point in polygon
-reslots_df['lic'] = reslots_df['bbl'].isin(lic_li)
 
-# ... or in a lower density growth management area
+reslots_df['mnc_lic'] = (reslots_df['cd'].isin(mnc_li)) | (reslots_df['bbl'].isin(lic_li))
+
+# considered small 
+small10k_li = ['R6', 'R7-1', 'R7A', 'R7B', 'R7D', 'R7X']
+small15k_li = ['R7-2', 'R8', 'R9', 'R10']
+
+small10k_cond = (reslots_df['lotarea'] <= 10000) & (reslots_df['zonedist'].isin(small10k_li))
+small15k_cond = (reslots_df['lotarea'].between(10001, 15000)) & (reslots_df['zonedist'].isin(small15k_li)) & (reslots_df['zonedist'] != 'R8B')
+
+reslots_df['small'] = small10k_cond | small15k_con
+
+# in a lower density growth management area
 ldgma_si = ('R1', 'R2','R3','R4A', 'R4-1', 'C1', 'C2', 'C3A', 'C4')
 ldgma_bx10 = ('R1', 'R2','R3','R4A', 'R4-1', 'R6', 'R7', 'C1', 'C2', 'C3A')   
-                                                              
-reslots_df['ldgma'] = np.select([reslots_df['cd'].str.startswith('5') & reslots_df['zonedist'].str.startswith(ldgma_si),
-                                 (reslots_df['cd'] == '210') & reslots_df['zonedist'].str.startswith(ldgma_bx10)],
-                                [True, 
-                                 True],
-                                default = False)
 
-# determine if lot is considered small 
-small10k_li = []
-reslots_df['small10k'] = 
-(reslots_df['lotarea'] < 10000) & (reslots_df['zonedist'].isin(small10k_li))
+ldgma_si_cond = (reslots_df['cd'].str.startswith('5')) & (reslots_df['zonedist'].str.startswith(ldgma_si))
+ldgma_bx10_cond = (reslots_df['cd'] == '210') & (reslots_df['zonedist'].str.startswith(ldgma_bx10))
 
-small15k_li = []
-reslots_df['small15k'] =   
-(reslots_df['lotarea'] < 15000) & (reslots_df['zonedist'].isin(small15k_li))
+reslots_df['ldgma'] = ldgma_si_cond | ldgma_bx10_cond
 
 # import parking requirements
-req_df = pd.read_csv(path + 'input/requiredparking.csv')
+reqparking_df = pd.read_csv(path + 'input/requiredparking.csv')
 
 # get required parking spaces 
-def get_parking (df):
-    if (df['mnc'] == True) | (df['lic'] == True): # zr 13-10, 16-10
+def get_parking (row):
+    if row['mnc_lic'] is True: 
         spaces = 0
-    elif df['small10k'] == True: # zr 25-24
-        spaces = df['units'] * req_df['small10k']
-    elif df['small15k'] == True: # zr 25-24
-        spaces = df['units'] * req_df['small15k']
-    else: # zr 25-23
-        spaces = df['units'] * req_df['standard']
+    elif row['small'] is True:
+        spaces = row['units'] * reqparking_df.loc[reqparking_df['zonedist'] == row['zonedist'], 'small']
+    else: 
+        spaces = row['units'] * reqparking_df.loc[reqparking_df['zonedist'] == row['zonedist'], 'standard'] 
     return spaces
 
-#%% Effective Parking: Spaces Waived 
+reslots_df['reqparking'] = reslots_df.apply(lambda row: get_parking(row))
 
+#%% Effective Parking: Spaces Waived 
+ 
+# waiver of requirements for small zoning lots in high bulk districts (zr 25-242)
+# waiver of requirements for narrow zoning lots in certain districts (zr 25-243)
 # waiver of requirements for small number of spaces (zr 25-26)
+
+# determine if lot..
+
+# is considered small or narrow
+singlefam = reslots_df['bldgclass'].str.startswith('A')
+interiorlot = (reslots_df['lottype'] != 3) & (reslots_df['lottype'] != 4) 
+
+small_w_cond = (reslots_df['lotarea'] <= 10000) & (reslots_df['zonedist'].isin(small15k_li)) & (reslots_df['zonedist'] != 'R8B')
+narrow_w_cond = (reslots_df['zonedist'].isin(['R3A', 'R4-1']) & (singlefam) & (interiorlot)
+
+reslots_df['small_narrow'] = small_w_cond | narrow_w_cond               
+
+# generates small number of spaces
+spaces1_w_li = ['R4B', 'R5B', 'R5D']
+spaces5_w_li = ['R6', 'R7-1', 'R7B']
+spaces15_w_li = ['R7-2', 'R7A', 'R7D', 'R7X', 'R8', 'R9', 'R10']        
+
+           
+# get required parking spaces with waiver
+def get_waiver_parking(row):
+    if row['small_narrow'] is True:
+        spaces = 0
+    elif:
+    else:
+    return spaces
+
+reslots_df['waiverparking'] = reslots_df.apply(lambda row: get_waiver_parking(row))
 
 #%% Actual Parking
