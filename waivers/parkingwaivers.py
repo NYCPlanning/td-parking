@@ -48,11 +48,11 @@ client = Socrata(data_link, app_token)
 # hdb_df = hdb_df[cols]
 
 # cols_di = {'CompltYear': 'year',
-#            'UnitsCO': 'units',
-#            'ZoningDst1': 'zonedist',
-#            'CommntyDst': 'cd',
-#            'Latitude': 'lat',
-#            'Longitude': 'long'}
+#             'UnitsCO': 'units',
+#             'ZoningDst1': 'zonedist',
+#             'CommntyDst': 'cd',
+#             'Latitude': 'lat',
+#             'Longitude': 'long'}
 
 # hdb_df.rename(columns = cols_di, inplace = True)
 # hdb_df.columns = hdb_df.columns.str.lower()
@@ -77,6 +77,7 @@ client = Socrata(data_link, app_token)
 
 #%% Effective Parking: Spaces Required 
 
+# required accessory off-street parking spaces for residences when permitted in commercial districts (zr 36-30)
 # permitted off-street parking in the manhattan core (zr 13-10) and long island city area (zr 16-10)
 # requirements where group parking facilities are provided (zr 25-23)
 # reduced requirements for small zoning lots (zr 25-241)
@@ -84,46 +85,64 @@ client = Socrata(data_link, app_token)
 reslots_df = pd.read_csv(path + 'input/reslots.csv', dtype = str)
 reslots_df[['units', 'lotarea', 'lotfront']] = reslots_df[['units', 'lotarea', 'lotfront']].astype(float)
 
+# pull out residential component in mx zones 
+reslots_df['zonedistadj'] = reslots_df['zonedist'].str.split('/').str.get(-1) # mx zones
+
+# convert commercial districts to residential district equivalents 
+rde_df = pd.read_csv(path + 'input/resdistequiv.csv', dtype = str)
+rde_di = rde_df.set_index('resdist')['commdist'].to_dict()
+rde_di = {key: oldkey for oldkey, oldvalue in rde_di.items() for key in oldvalue.split(' ')}
+reslots_df['zonedistadj'] = reslots_df['zonedistadj'].replace(rde_di)
+
+# convert commercial overlays to the residential districts in which they are mapped 
+
 # determine if lot is...
 
-# in the manhattan core or long island city area
+# ... in the manhattan core or long island city area
 mnc_li = ['101','102', '103', '104', '105', '106', '107', '108'] 
 lic_li = pd.read_csv(path + 'input/lic_bbl.csv', dtype = str).loc[:,'bbl'] # gis point in polygon
 
 reslots_df['mnc_lic'] = (reslots_df['cd'].isin(mnc_li)) | (reslots_df['bbl'].isin(lic_li))
 
-# considered small 
+# ... considered small 
 small10k_li = ['R6', 'R7-1', 'R7A', 'R7B', 'R7D', 'R7X']
 small15k_li = ['R7-2', 'R8', 'R9', 'R10']
 
-small10k_cond = (reslots_df['lotarea'] <= 10000) & (reslots_df['zonedist'].isin(small10k_li))
-small15k_cond = (reslots_df['lotarea'].between(10001, 15000)) & (reslots_df['zonedist'].isin(small15k_li)) & (reslots_df['zonedist'] != 'R8B')
+small10k_cond = (reslots_df['lotarea'] <= 10000) & (reslots_df['zonedistadj'].isin(small10k_li))
+small15k_cond = (reslots_df['lotarea'].between(10001, 15000)) & (reslots_df['zonedistadj'].isin(small15k_li)) & (reslots_df['zonedistadj'] != 'R8B')
 
-reslots_df['small'] = small10k_cond | small15k_con
+reslots_df['small'] = small10k_cond | small15k_cond
 
-# in a lower density growth management area
+# ... in a lower density growth management area
 ldgma_si = ('R1', 'R2','R3','R4A', 'R4-1', 'C1', 'C2', 'C3A', 'C4')
 ldgma_bx10 = ('R1', 'R2','R3','R4A', 'R4-1', 'R6', 'R7', 'C1', 'C2', 'C3A')   
 
-ldgma_si_cond = (reslots_df['cd'].str.startswith('5')) & (reslots_df['zonedist'].str.startswith(ldgma_si))
-ldgma_bx10_cond = (reslots_df['cd'] == '210') & (reslots_df['zonedist'].str.startswith(ldgma_bx10))
+ldgma_si_cond = (reslots_df['cd'].str.startswith('5')) & (reslots_df['zonedistadj'].str.startswith(ldgma_si))
+ldgma_bx10_cond = (reslots_df['cd'] == '210') & (reslots_df['zonedistadj'].str.startswith(ldgma_bx10))
 
 reslots_df['ldgma'] = ldgma_si_cond | ldgma_bx10_cond
 
 # import parking requirements
-reqparking_df = pd.read_csv(path + 'input/requiredparking.csv')
+reqpark_df = pd.read_csv(path + 'input/requiredparking.csv')
 
-# get required parking spaces 
-def get_parking (row):
-    if row['mnc_lic'] is True: 
-        spaces = 0
+# get required parking spaces per dwelling unit
+def get_required_parking (row):
+    if (row['zonedistadj'] in list(reqpark_df['zonedist'])) is False:
+        multiplier = 0
+    elif row['mnc_lic'] is True: 
+        multiplier = 0
     elif row['small'] is True:
-        spaces = row['units'] * reqparking_df.loc[reqparking_df['zonedist'] == row['zonedist'], 'small']
+        multiplier =  reqpark_df.loc[reqpark_df['zonedist'] == row['zonedistadj'], 'small'].values[0]
+    elif row['ldgma'] is True:
+        if row['zonedist'].startswith(('C1', 'C2')):
+            multiplier = 1
+        else:
+            multiplier = 1.5
     else: 
-        spaces = row['units'] * reqparking_df.loc[reqparking_df['zonedist'] == row['zonedist'], 'standard'] 
-    return spaces
+        multiplier = reqpark_df.loc[reqpark_df['zonedist'] == row['zonedistadj'], 'standard'].values[0]
+    return multiplier
 
-reslots_df['reqparking'] = reslots_df.apply(lambda row: get_parking(row))
+reslots_df['reqpark'] = reslots_df.apply(lambda row: get_required_parking(row), axis = 1)
 
 #%% Effective Parking: Spaces Waived 
  
