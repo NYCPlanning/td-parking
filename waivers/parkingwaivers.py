@@ -30,9 +30,9 @@ data_link = 'data.cityofnewyork.us'
 app_token = pd.read_csv('C:/Users/M_Free/Desktop/key_opendata.csv', dtype = str).loc[0, 'token']
 client = Socrata(data_link, app_token)
 
-#%% Effective Parking: Data Cleaning
+#%% Effective Parking: Data Download
 
-# # import and filter housing database
+# import and filter housing database
 # hdb_df = pd.read_csv(local_path + 'Parking/Waivers/HousingDB/HousingDB_post2010_completed_jobs.csv', dtype = str)
 # hdb_df = hdb_df[hdb_df['Job_Type'] == 'New Building']
 
@@ -41,6 +41,8 @@ client = Socrata(data_link, app_token)
 #         'CompltYear',
 #         'UnitsCO',
 #         'ZoningDst1',
+#         'ZoningDst2',
+#         'SpeclDst2',
 #         'CommntyDst',
 #         'Latitude',
 #         'Longitude']
@@ -50,6 +52,8 @@ client = Socrata(data_link, app_token)
 # cols_di = {'CompltYear': 'year',
 #             'UnitsCO': 'units',
 #             'ZoningDst1': 'zonedist',
+#             'ZoningDst2': 'zonedistb',
+#             'SpeclDst2': 'spdist',
 #             'CommntyDst': 'cd',
 #             'Latitude': 'lat',
 #             'Longitude': 'long'}
@@ -66,7 +70,11 @@ client = Socrata(data_link, app_token)
 #         'lotarea',
 #         'lotfront',
 #         'lottype',
-#         'bldgclass']
+#         'bldgclass',
+#         'zonedist1',
+#         'zonedist2',
+#         'overlay1',
+#         'spdist1']
 
 # pluto_df = pluto_df[cols]
 
@@ -75,7 +83,7 @@ client = Socrata(data_link, app_token)
 # reslots_df = pd.merge(hdb_df, pluto_df, how = 'inner', on = 'bbl') # need to fix: lose ~150 rows 
 # reslots_df.to_csv(path + 'input/reslots.csv', index = False)
 
-#%% Effective Parking: Spaces Required 
+#%% Effective Parking: Data Cleaning
 
 # required accessory off-street parking spaces for residences when permitted in commercial districts (zr 36-30)
 # permitted off-street parking in the manhattan core (zr 13-10) and long island city area (zr 16-10)
@@ -90,11 +98,14 @@ reslots_df['zonedistadj'] = reslots_df['zonedist'].str.split('/').str.get(-1) # 
 
 # convert commercial districts to residential district equivalents 
 rde_df = pd.read_csv(path + 'input/resdistequiv.csv', dtype = str)
-rde_di = rde_df.set_index('resdist')['commdist'].to_dict()
-rde_di = {key: oldkey for oldkey, oldvalue in rde_di.items() for key in oldvalue.split(' ')}
+rde_di = rde_df.set_index('commdist')['resdist'].to_dict()
 reslots_df['zonedistadj'] = reslots_df['zonedistadj'].replace(rde_di)
 
-# convert commercial overlays to the residential districts in which they are mapped 
+# convert commercial overlays to the residential districts in which they are mapped
+overlay = ('C1-1', 'C1-2', 'C1-3', 'C1-4', 'C1-5', 'C2-1', 'C2-2', 'C2-3', 'C2-4', 'C2-5')
+overlay_cond = (reslots_df['zonedistadj'].str.startswith(overlay)) & (reslots_df['zonedistb'].notna())
+reslots_df['zonedistb'] = reslots_df['zonedistb'].replace(' ', np.nan)
+reslots_df.loc[overlay_cond, 'zonedistadj'] = reslots_df['zonedistb']
 
 # determine if lot is...
 
@@ -122,13 +133,28 @@ ldgma_bx10_cond = (reslots_df['cd'] == '210') & (reslots_df['zonedistadj'].str.s
 
 reslots_df['ldgma'] = ldgma_si_cond | ldgma_bx10_cond
 
-# import parking requirements
+#%% Effective Parking: Spaces Required
+
+# import standard and small lot parking requirements
 reqpark_df = pd.read_csv(path + 'input/requiredparking.csv')
 
+# set variables for lots not counted
+# c_notcounted = 0 # commercial
+# m_notcounted = 0 # manufacturing
+# o_notcounted = 0 # other
+
+#         if reslots_df['zonedistadj'].str.startswith('C') is True: 
+#             c_notcounted += 1
+#         elif reslots_df['zonedistadj'].str.startswith('M') is True:
+#             m_notcounted += 1
+#         else: 
+#             o_notcounted += 1
+
 # get required parking spaces per dwelling unit
-def get_required_parking (row):
+def get_required_parking(row):
     if (row['zonedistadj'] in list(reqpark_df['zonedist'])) is False:
         multiplier = 0
+
     elif row['mnc_lic'] is True: 
         multiplier = 0
     elif row['small'] is True:
@@ -143,7 +169,7 @@ def get_required_parking (row):
     return multiplier
 
 reslots_df['reqpark'] = reslots_df.apply(lambda row: get_required_parking(row), axis = 1)
-
+reslots_df['reqspaces'] = reslots_df['units'] * reslots_df['reqpark']
 #%% Effective Parking: Spaces Waived 
  
 # waiver of requirements for small zoning lots in high bulk districts (zr 25-242)
