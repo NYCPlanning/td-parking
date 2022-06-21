@@ -90,6 +90,7 @@ client = Socrata(data_link, app_token)
 # requirements where group parking facilities are provided (zr 25-23)
 # applicability of (accessory off-street parking) regulations in community district 14, queens (zr 25-027)
 # applicability of (accessory off-street parking) regulations in waterfront area (zr 25-025)
+# applicability of (accessory off-street parking) regulations in M1-6D districts (zr 44-024)
 # reduced requirements for small zoning lots (zr 25-241)
 
 reslots_df = pd.read_csv(path + 'input/reslots.csv', dtype = str)
@@ -98,7 +99,10 @@ reslots_df[['units', 'lotarea', 'lotfront']] = reslots_df[['units', 'lotarea', '
 # convert districts from... 
 
 # ... mixed use to their residential component
-reslots_df['zonedistadj'] = reslots_df['zonedist'].str.split('/').str.get(-1) # mx zones
+reslots_df['zonedistadj'] = reslots_df['zonedist'].str.split('/').str.get(-1) 
+
+mx_cond = (reslots_df['zonedistadj'].str.startswith('M')) & (reslots_df['zonedistb'].str.startswith('R'))
+reslots_df.loc[mx_cond, 'zonedistadj'] = reslots_df['zonedistb'] 
 
 # ... commercial to residential district equivalents (zr 36-30)
 rde_df = pd.read_csv(path + 'input/resdistequiv.csv', dtype = str)
@@ -143,6 +147,9 @@ reslots_df.loc[ura_cond,'zonedistadj'] = 'R5'
 wtr_cond = (reslots_df['lottype'] == '2') & (reslots_df['zonedistadj'] == 'R7-3')
 reslots_df.loc[wtr_cond, 'zonedistadj'] = 'R7-2'
 
+# ... a M1-6D (zr 44-024)
+reslots_df.loc[reslots_df['zonedistadj'] == 'M1-6D', 'zonedistadj'] = 'C6-4'
+
 # determine if lot is considered small (zr 25-241)
 small10k_li = ['R6', 'R7-1', 'R7A', 'R7B', 'R7D', 'R7X']
 small15k_li = ['R7-2', 'R8', 'R9', 'R10']
@@ -156,18 +163,6 @@ reslots_df['small'] = small10k_cond | small15k_cond
 
 # import standard and small lot parking requirements
 reqpark_df = pd.read_csv(path + 'input/reqpark.csv')
-
-# set variables for lots not counted
-# c_notcounted = 0 # commercial
-# m_notcounted = 0 # manufacturing
-# o_notcounted = 0 # other
-
-#         if reslots_df['zonedistadj'].str.startswith('C') is True: 
-#             c_notcounted += 1
-#         elif reslots_df['zonedistadj'].str.startswith('M') is True:
-#             m_notcounted += 1
-#         else: 
-#             o_notcounted += 1
 
 # get required parking spaces per dwelling unit
 def get_required_parking(row):
@@ -191,8 +186,22 @@ def get_required_parking(row):
     return multiplier
 
 reslots_df['reqpark'] = reslots_df.apply(lambda row: get_required_parking(row), axis = 1)
-reslots_df['reqspaces'] = reslots_df['units'] * reslots_df['reqpark']
+reslots_df['reqspaces'] = round(reslots_df['units'] * reslots_df['reqpark'])
 
+# reslots_df['zonedistadj'].value_counts()
+# reslots_df['zonedistadj'].str.startswith('M').sum()
+# reslots_df['zonedistadj'].str.startswith('C').sum()
+# reslots_df['reqpark'].value_counts()
+# reslots_df['units'].sum()
+# reslots_df['reqspaces'].sum()
+
+print(f"Required Parking Without Waivers: {round(reslots_df['reqspaces'].sum()/reslots_df['units'].sum(), 3)}")
+print(f"Required Parking Without Waivers, Excluding C Districts Not Adjusted: {round(reslots_df['reqspaces'].sum()/(reslots_df['units'].sum() - reslots_df.loc[reslots_df['zonedistadj'].str.startswith('C') == True, 'units'].sum()), 3)}")
+
+# HIGH R6+ V LOW DENSITY R1-5 V NOT REQUIRED
+
+#FIX ZONEDISTADJ NAN
+ 
 #%% Effective Parking: Spaces Waived 
  
 # waiver of requirements for small zoning lots in high bulk districts (zr 25-242)
@@ -201,29 +210,43 @@ reslots_df['reqspaces'] = reslots_df['units'] * reslots_df['reqpark']
 
 # determine if lot..
 
-# is considered small or narrow
+# ... is considered small or narrow
 singlefam = reslots_df['bldgclass'].str.startswith('A')
 interiorlot = (reslots_df['lottype'] != 3) & (reslots_df['lottype'] != 4) 
 
-small_w_cond = (reslots_df['lotarea'] <= 10000) & (reslots_df['zonedist'].isin(small15k_li)) & (reslots_df['zonedist'] != 'R8B')
-narrow_w_cond = (reslots_df['zonedist'].isin(['R3A', 'R4-1']) & (singlefam) & (interiorlot)
+small_w_cond = (reslots_df['lotarea'] <= 10000) & (reslots_df['zonedistadj'].isin(small15k_li)) & (reslots_df['zonedistadj'] != 'R8B')
+narrow_w_cond = (reslots_df['zonedistadj'].isin(['R3A', 'R4-1'])) & singlefam & interiorlot
 
-reslots_df['small_narrow'] = small_w_cond | narrow_w_cond               
+reslots_df['smallnarrow'] = small_w_cond | narrow_w_cond
 
-# generates small number of spaces
-spaces1_w_li = ['R4B', 'R5B', 'R5D']
-spaces5_w_li = ['R6', 'R7-1', 'R7B']
-spaces15_w_li = ['R7-2', 'R7A', 'R7D', 'R7X', 'R8', 'R9', 'R10']        
+# ... generates small number of spaces
+spaces1_w = ('R4B', 'R5B', 'R5D')
+spaces5_w = ('R6', 'R7-1', 'R7B')
+spaces15_w = ('R7-2', 'R7A', 'R7D', 'R7X', 'R8', 'R9', 'R10')     
 
-           
+reslots_df['smallnumspaces'] = reslots_df['zonedistadj'].str.startswith(spaces1_w + spaces5_w + spaces5_w)  
+          
 # get required parking spaces with waiver
 def get_waiver_parking(row):
-    if row['small_narrow'] is True:
+    if row['smallnarrow'] is True:
         spaces = 0
-    elif:
+    elif str(row['zonedistadj']).startswith(spaces1_w):
+        spaces = max((row['reqspaces'] - 1), 0)
+    elif str(row['zonedistadj']).startswith(spaces5_w):
+        spaces = max((row['reqspaces'] - 5), 0)
+    elif str(row['zonedistadj']).startswith(spaces15_w):
+        spaces = max((row['reqspaces'] - 15), 0)
     else:
+        spaces = row['reqspaces']
     return spaces
 
-reslots_df['waiverparking'] = reslots_df.apply(lambda row: get_waiver_parking(row))
+reslots_df['waiverspaces'] = reslots_df.apply(lambda row: get_waiver_parking(row), axis = 1)
+
+reslots_df['diff'] = reslots_df['reqspaces'] - reslots_df['waiverspaces']
+
+print(f"Waiver Eligibility: {len(reslots_df.loc[reslots_df['diff'] > 0])} Projects, {round(len(reslots_df.loc[reslots_df['diff'] > 0]) / len(reslots_df), 3)}%")
+print(f"Required Parking With Waivers: {round(reslots_df['waiverspaces'].sum()/reslots_df['units'].sum(), 3)}%")
+print(f"Required Parking With Waivers, Excluding C Districts Not Adjusted: {round(reslots_df['waiverspaces'].sum()/(reslots_df['units'].sum() - reslots_df.loc[reslots_df['zonedistadj'].str.startswith('C') == True, 'units'].sum()), 3)}%")
+
 
 #%% Actual Parking
