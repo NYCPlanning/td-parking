@@ -32,58 +32,56 @@ client = Socrata(data_link, app_token)
 
 #%% Effective Parking: Data Download
 
-# import and filter housing database
-hdb_df = pd.read_csv(local_path + 'Parking/Waivers/HousingDB/HousingDB_post2010_completed_jobs.csv', dtype = str)
-hdb_df = hdb_df[hdb_df['Job_Type'] == 'New Building']
+# # import and filter housing database
+# hdb_df = pd.read_csv(local_path + 'Parking/Waivers/HousingDB/HousingDB_post2010_completed_jobs.csv', dtype = str)
+# hdb_df = hdb_df[hdb_df['Job_Type'] == 'New Building']
 
-cols = ['BBL',
-        'BIN',
-        'CompltYear',
-        'UnitsCO',
-        'ZoningDst1',
-        'ZoningDst2',
-        'SpeclDst2',
-        'CommntyDst',
-        'Latitude',
-        'Longitude']
+# cols = ['BBL',
+#         'BIN',
+#         'CompltYear',
+#         'UnitsCO',
+#         'ZoningDst1',
+#         'ZoningDst2',
+#         'SpeclDst2',
+#         'CommntyDst',
+#         'Latitude',
+#         'Longitude']
 
-hdb_df = hdb_df[cols]
+# hdb_df = hdb_df[cols]
 
-cols_di = {'CompltYear': 'year',
-            'UnitsCO': 'units',
-            'ZoningDst1': 'zonedist',
-            'ZoningDst2': 'zonedistb',
-            'SpeclDst2': 'spdist',
-            'CommntyDst': 'cd',
-            'Latitude': 'lat',
-            'Longitude': 'long'}
+# cols_di = {'CompltYear': 'year',
+#             'UnitsCO': 'units',
+#             'ZoningDst1': 'zonedist',
+#             'ZoningDst2': 'zonedistb',
+#             'SpeclDst2': 'spdist',
+#             'CommntyDst': 'cd',
+#             'Latitude': 'lat',
+#             'Longitude': 'long'}
 
-hdb_df.rename(columns = cols_di, inplace = True)
-hdb_df.columns = hdb_df.columns.str.lower()
+# hdb_df.rename(columns = cols_di, inplace = True)
+# hdb_df.columns = hdb_df.columns.str.lower()
 
-# import and filter PLUTO
-data_id = '64uk-42ks'
-results = client.get(data_id, limit = 860000)
-pluto_df = pd.DataFrame.from_records(results)
+# # import and filter PLUTO
+# data_id = '64uk-42ks'
+# results = client.get(data_id, limit = 860000)
+# pluto_df = pd.DataFrame.from_records(results)
 
-cols = ['bbl', 
-        'lotarea',
-        'lotfront',
-        'lottype',
-        'bldgclass',
-        'zonedist1',
-        'zonedist2',
-        'overlay1',
-        'spdist1',
-        'splitzone'
-        'cd',
-        'ct']
+# cols = ['bbl', 
+#         'lotarea',
+#         'lotfront',
+#         'lottype',
+#         'bldgclass',
+#         'zonedist1',
+#         'zonedist2',
+#         'overlay1',
+#         'spdist1',
+#         'splitzone']
 
-pluto_df = pluto_df[cols]
+# pluto_df = pluto_df[cols]
 
-# merge dfs and export 
-pluto_df['bbl'] = pluto_df['bbl'].str.split('.').str.get(-2)
-reslots_df = pd.merge(hdb_df, pluto_df, how = 'inner', on = 'bbl') # need to fix: lose ~150 rows 
+# # merge dfs and export 
+# pluto_df['bbl'] = pluto_df['bbl'].str.split('.').str.get(-2)
+# reslots_df = pd.merge(hdb_df, pluto_df, how = 'inner', on = 'bbl') # need to fix: lose ~150 rows 
 # reslots_df.to_csv(path + 'input/reslots.csv', index = False)
 
 #%% Effective Parking: Data Cleaning
@@ -107,16 +105,20 @@ reslots_df['zonedistadj'] = reslots_df['zonedist'].str.split('/').str.get(-1)
 mx_cond = (reslots_df['zonedistadj'].str.startswith('M')) & (reslots_df['zonedistb'].str.startswith('R'))
 reslots_df.loc[mx_cond, 'zonedistadj'] = reslots_df['zonedistb'] 
 
+# ... commercial overlay to the residential districts in which they are mapped (zr 36-30)
+overlay = ('C1-1', 'C1-2', 'C1-3', 'C1-4', 'C1-5', 'C2-1', 'C2-2', 'C2-3', 'C2-4', 'C2-5')
+
+reslots_df['zonedistb'] = reslots_df['zonedistb'].replace(' ', np.nan)
+overlay1_cond = (reslots_df['zonedistadj'].str.startswith(overlay)) & (reslots_df['zonedistb'].notna())
+reslots_df.loc[overlay1_cond, 'zonedistadj'] = reslots_df['zonedistb']
+
+overlay2_cond = (reslots_df['zonedistadj'].str.startswith(overlay)) & (reslots_df['zonedistadj'] == reslots_df['overlay1'])
+reslots_df.loc[overlay2_cond, 'zonedistadj'] = reslots_df['zonedist1']
+
 # ... commercial to residential district equivalents (zr 36-30)
 rde_df = pd.read_csv(path + 'input/resdistequiv.csv', dtype = str)
 rde_di = rde_df.set_index('commdist')['resdist'].to_dict()
 reslots_df['zonedistadj'] = reslots_df['zonedistadj'].replace(rde_di)
-
-# ... commercial overlay to the residential districts in which they are mapped (zr 36-30)
-overlay = ('C1-1', 'C1-2', 'C1-3', 'C1-4', 'C1-5', 'C2-1', 'C2-2', 'C2-3', 'C2-4', 'C2-5')
-overlay_cond = (reslots_df['zonedistadj'].str.startswith(overlay)) & (reslots_df['zonedistb'].notna())
-reslots_df['zonedistb'] = reslots_df['zonedistb'].replace(' ', np.nan)
-reslots_df.loc[overlay_cond, 'zonedistadj'] = reslots_df['zonedistb']
 
 # determine if lot is in ...
 
@@ -251,22 +253,7 @@ print(f"Waiver Eligibility: {len(reslots_df.loc[reslots_df['diff'] > 0])} Projec
 print(f"Required Parking With Waivers: {round(reslots_df['waiverspaces'].sum()/reslots_df['units'].sum(), 3)}%")
 print(f"Required Parking With Waivers, Excluding C Districts Not Adjusted: {round(reslots_df['waiverspaces'].sum()/(reslots_df['units'].sum() - reslots_df.loc[reslots_df['zonedistadj'].str.startswith('C') == True, 'units'].sum()), 3)}%")
 
-test_li = ['4000860001',
-           '3000540001', 
-           '1009450023', 
-           '3001570001',
-           '3020850075',
-           '3070600019',
-           '2023190160',
-           '1017900001',
-           '3020090026',
-           '1003460175',
-           '3050630058',
-           '2024960073',
-           '3044960029',
-           '1010760001']
 
-test_df = reslots_df.loc[reslots_df['bbl'].isin(test_li)]
-
+# 66-24 
 
 #%% Actual Parking
