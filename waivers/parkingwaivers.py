@@ -214,16 +214,6 @@ def get_required_parking(row):
 reslots_df['reqpark'] = reslots_df.apply(lambda row: get_required_parking(row), axis = 1)
 reslots_df['reqspaces'] = ((reslots_df['units'] * reslots_df['reqpark']) + .5).astype(int) # rounding
 
-# create results df 
-req_results = reslots_df[['parktype', 'units', 'reqspaces']].groupby(['parktype']).sum()
-req_results.loc['not permitted/required'] = req_results.loc['not permitted'] + req_results.loc['not required']
-req_results = req_results.drop(['not permitted', 'not required'])
-req_results.loc['total w/o waivers'] = req_results.sum()
-
-req_results['% units'] = req_results['units'] / req_results.loc['total w/o waivers']['units']
-req_results['% reqspaces'] = req_results['reqspaces'] / req_results.loc['total w/o waivers']['reqspaces']
-req_results['rate'] = round(req_results['reqspaces'] / req_results['units'], 3)
-
 # export for co analysis 
 # for_co = reslots_df[['bbl', 'bin', 'year', 'units', 'parktype']]
 # for_co.to_csv(path + 'output/for_co.csv', index = False)
@@ -250,7 +240,19 @@ spaces1_w = ('R4B', 'R5B', 'R5D')
 spaces5_w = ('R6', 'R7-1', 'R7B')
 spaces15_w = ('R7-2', 'R7A', 'R7D', 'R7X', 'R8', 'R9', 'R10')     
 
-reslots_df['smallnumspaces'] = reslots_df['zonedistadj'].str.startswith(spaces1_w + spaces5_w + spaces5_w)  
+reslots_df['smallnumspaces'] = reslots_df['zonedistadj'].str.startswith(spaces1_w + spaces5_w + spaces15_w)  
+
+# get if parking can be waived 
+def get_waiver_type(row):
+    if row['smallnarrow'] is True:
+        waivetype = 'waiver - small/narrow'
+    elif (row['smallnumspaces'] is True) & (row['reqspaces'] != 0):
+        waivetype = 'waiver - small num of spaces'
+    else:
+        waivetype = 'no waiver'
+    return waivetype
+
+reslots_df['waivertype'] = reslots_df.apply(lambda row: get_waiver_type(row), axis = 1)
           
 # get required parking spaces with waiver
 def get_waiver_parking(row):
@@ -268,12 +270,21 @@ def get_waiver_parking(row):
 
 reslots_df['waiverspaces'] = reslots_df.apply(lambda row: get_waiver_parking(row), axis = 1)
 
-reslots_df['diff'] = reslots_df['reqspaces'] - reslots_df['waiverspaces']
+#%% Required/Waived Parking Results 
+ 
+req_results = reslots_df[['parktype', 'units']].groupby(['parktype']).count().rename(columns = {'units': 'developments'})
+sum_results = reslots_df[['parktype', 'units', 'reqspaces', 'waiverspaces']].groupby(['parktype']).sum()
+req_results = req_results.join(sum_results)
 
-print(f"Waiver Eligibility: {len(reslots_df.loc[reslots_df['diff'] > 0])} Projects, {round(len(reslots_df.loc[reslots_df['diff'] > 0]) / len(reslots_df), 3)}%")
-print(f"Required Parking With Waivers: {round(reslots_df['waiverspaces'].sum()/reslots_df['units'].sum(), 3)}%")
-print(f"Required Parking With Waivers, Excluding C Districts Not Adjusted: {round(reslots_df['waiverspaces'].sum()/(reslots_df['units'].sum() - reslots_df.loc[reslots_df['zonedistadj'].str.startswith('C') == True, 'units'].sum()), 3)}%")
+req_results.loc['not permitted/required'] = req_results.loc['not permitted'] + req_results.loc['not required']
+req_results = req_results.drop(['not permitted', 'not required'])
+req_results.loc['total'] = req_results.sum()
 
-# 66-24 
+req_results['% dev'] = req_results['developments'] / req_results.loc['total']['developments']
+req_results['% units'] = req_results['units'] / req_results.loc['total']['units']
+req_results['% reqspaces'] = req_results['reqspaces'] / req_results.loc['total']['reqspaces']
+req_results['% waiverspaces'] = req_results['waiverspaces'] / req_results.loc['total']['waiverspaces']
+req_results['reqrate'] = round(req_results['reqspaces'] / req_results['units'], 3)
+req_results['waiverrate'] = round(req_results['waiverspaces'] / req_results['units'], 3)
 
-#%% Actual Parking
+reslots_df['waivertype'].sum()
