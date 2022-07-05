@@ -13,15 +13,14 @@ import io
 import urllib.request
 from pdfminer.high_level import extract_text
 
-
 # DCP proxy
-usernm = pd.read_csv('C:/Users/M_Free/Desktop/key.csv', dtype = str).loc[0, 'username']
-passwd = pd.read_csv('C:/Users/M_Free/Desktop/key.csv', dtype = str).loc[0, 'password']
-p={'http':'http://'+str(usernm)+':'+str(passwd)+'@dcpproxy1.dcp.nycnet:8080',
-    'https':'http://'+str(usernm)+':'+str(passwd)+'@dcpproxy1.dcp.nycnet:8080'}
+# usernm = pd.read_csv('C:/Users/M_Free/Desktop/key.csv', dtype = str).loc[0, 'username']
+# passwd = pd.read_csv('C:/Users/M_Free/Desktop/key.csv', dtype = str).loc[0, 'password']
+# p={'http':'http://'+str(usernm)+':'+str(passwd)+'@dcpproxy1.dcp.nycnet:8080',
+#     'https':'http://'+str(usernm)+':'+str(passwd)+'@dcpproxy1.dcp.nycnet:8080'}
 
-path = 'C:/Users/M_Free/Desktop/td-parking/waivers/'
-# path = '/Users/Work/Desktop/GitHub/td-parking/waivers/'
+# path = 'C:/Users/M_Free/Desktop/td-parking/waivers/'
+path = '/Users/Work/Desktop/GitHub/td-parking/waivers/'
 
 bis_url = 'https://a810-bisweb.nyc.gov/bisweb/COsByLocationServlet?requestid=1&allbin='
 bin_num_df = pd.read_csv(path + 'output/for_co_test.csv', dtype = str)
@@ -30,9 +29,9 @@ bin_num_df = pd.read_csv(path + 'output/for_co_test.csv', dtype = str)
 
 s = Service(path + 'input/chromedriver')
 browser = webdriver.Chrome(service = s)
-# browser.get(url + '1087549')
-# browser.get(url + '1087877')
-browser.get(bis_url + '1087368')
+# browser.get(bis_url + '1087877')
+#browser.get(bis_url + '1087368')
+browser.get(bis_url + '3421378') #1 Clinton, Parking Spaces   
 time.sleep(7)
 soup = BeautifulSoup(browser.page_source, 'html.parser')
 browser.close()
@@ -115,21 +114,31 @@ def get_co_pdf(filename):
 url = get_co_pdf(x[0])
 print(url)
 
-# file = 'C:/Users/M_Free/Downloads/CofoDocumentContentServlet (1).pdf'
-# reader = PdfReader(file)
-# text = ""
-# for page in reader.pages:
-#     text += page.extract_text() + "\n"
+#%% downloading PDF from url 
  
-def pdf_getter(url:str):
-    '''
-    retrives pdf from url as bytes object
-    '''
-    open = urllib.request.urlopen(url).read()
-    return io.BytesIO(open)
+# def pdf_getter(url:str):
+#     '''
+#     retrives pdf from url as bytes object
+#     '''
+#     file = urllib.request.urlopen(url).read()
+#     print('here')
+#     return io.BytesIO(file)
  
-text = extract_text(pdf_getter(url))
- 
+# text = extract_text(pdf_getter(url))
+
+# s = Service(path + 'input/chromedriver')
+# browser = webdriver.Chrome(service = s)
+# browser.get(url)
+# time.sleep(7)
+# browser.close()
+
+#%% Text Extraction
+
+file = path + 'output/TestCO.pdf'
+text = extract_text(file)
+
+
+
 # high demand 
 # no co 
 
