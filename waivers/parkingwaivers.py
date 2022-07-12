@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Accessory Off-Street Parking for Residences:
-Effective (Required by Zoning) vs. Actual Spaces Built
-2010-Present
+Required vs. Effective (with Waivers) Parking Rates
+New Buildings Completed Between 2010 and 2020
 
 Assumptions: All Market Rate Units, No Special Districts
 Last Modified: June 2022
