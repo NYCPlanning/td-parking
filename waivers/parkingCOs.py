@@ -6,12 +6,16 @@ Given a BIN, return the number of residential parking spaces on the most recent 
 import pandas as pd 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
 import time
 from bs4 import BeautifulSoup
 import re 
 import io
 import urllib.request
 from pdfminer.high_level import extract_text
+import requests
+
+import subprocess
 
 # DCP proxy
 # usernm = pd.read_csv('C:/Users/M_Free/Desktop/key.csv', dtype = str).loc[0, 'username']
@@ -27,11 +31,11 @@ bin_num_df = pd.read_csv(path + 'output/for_co_test.csv', dtype = str)
 
 #%% Download CO PDFs
 
+bin_num = '3421378' #1 Clinton, Parking Spaces 
+
 s = Service(path + 'input/chromedriver')
 browser = webdriver.Chrome(service = s)
-# browser.get(bis_url + '1087877')
-#browser.get(bis_url + '1087368')
-browser.get(bis_url + '3421378') #1 Clinton, Parking Spaces   
+browser.get(bis_url + bin_num)   
 time.sleep(7)
 soup = BeautifulSoup(browser.page_source, 'html.parser')
 browser.close()
@@ -114,29 +118,31 @@ def get_co_pdf(filename):
 url = get_co_pdf(x[0])
 print(url)
 
-#%% downloading PDF from url 
- 
-# def pdf_getter(url:str):
-#     '''
-#     retrives pdf from url as bytes object
-#     '''
-#     file = urllib.request.urlopen(url).read()
-#     print('here')
-#     return io.BytesIO(file)
- 
-# text = extract_text(pdf_getter(url))
+node = '/usr/local/bin/node'
+js = path + 'input/pdf-reader/index.js'
+output = path + 'output/pdfs' 
 
-# s = Service(path + 'input/chromedriver')
-# browser = webdriver.Chrome(service = s)
-# browser.get(url)
-# time.sleep(7)
-# browser.close()
+subprocess.Popen([node, js, url, bin_num, output]).wait()
 
 #%% Text Extraction
 
-file = path + 'output/TestCO.pdf'
-text = extract_text(file)
+file = extract_text(output + '/' + bin_num + '.pdf')
 
+results = pd.DataFrame(columns = ['bin', 'spaces'])
+
+def get_parking_spaces(textfile):
+    
+    p1 = re.compile(r"Type and number of open spaces:\nParking spaces \((\d+)\)").search(file)
+    
+    if p1: 
+        spaces = p1.group(1)
+    else:
+        spaces = 'test'
+    return spaces
+        
+results = results.append({'bin': bin_num,
+                          'spaces': get_parking_spaces(file)},
+                         ignore_index = True)        
 
 
 # high demand 
