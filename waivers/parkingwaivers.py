@@ -270,7 +270,10 @@ def get_waiver_parking(row):
 
 reslots_df['waiverspaces'] = reslots_df.apply(lambda row: get_waiver_parking(row), axis = 1)
 
-#%% Required/Waived Parking Results 
+# waivers = reslots_df[['bbl', 'units', 'zonedistadj', 'parktype', 'reqspaces', 'waiverspaces', 'lat', 'long']]
+# waivers.to_csv(path + 'output/waivers.csv', index = False)
+
+#%% Required/Effective Parking Results 
  
 req_results = reslots_df[['parktype', 'units']].groupby(['parktype']).count().rename(columns = {'units': 'developments'})
 sum_results = reslots_df[['parktype', 'units', 'reqspaces', 'waiverspaces']].groupby(['parktype']).sum()

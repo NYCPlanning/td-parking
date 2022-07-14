@@ -21,6 +21,7 @@ import re
 import subprocess
 import os 
 from pdfminer.high_level import extract_text
+from text_to_num import alpha2digit
 
 path = 'C:/Users/M_Free/Desktop/td-parking/waivers/'
 # path = '/Users/Work/Desktop/GitHub/td-parking/waivers/'
@@ -157,53 +158,84 @@ for binum in binum_df['bin']:
                               'url': url},
                              ignore_index = True)
     
-#%% Extract Parking Spaces from PDFs
 #%% Extract Parking Spaces From PDFs
+    
+def get_text(pdf_path):
+    """ 
+    This function takes a path to a CO PDF and returns the file's text 
+    prepped for pattern searching. 
+    Note: Text2Num only converts "one" to 1 when it is part of a sequence.
+    Isolated it may be a pronoun, which is not relevant for this analysis.
+    """ 
+    text = extract_text(pdf_path) 
+    text = alpha2digit(text, 'en') 
+    text = text.lower().replace('one', '1') 
+    text = text.replace(' ','')
+    return text
 
 def get_potential_parking(text): 
     """ 
     This function takes text extracted from a CO PDF, searches for strings
     that indicate there may be parking present and returns the number of 
     COs that may have parking.
+    Note: Potential parking is an overcount, since it may capture bikes. 
     """ 
     parking_li = ['parking', 'garage', 'car', 'vehicle'] 
-    
-    if any(x in text.lower() for x in parking_li):
+
+    if any(x in text for x in parking_li):
         parking = 1
     else: 
         parking = 0
     return parking
 
-count = 0
-
-for pdf in os.listdir(path + 'output/pdfs_test/'):
-    text = extract_text(path + 'output/pdfs_test/' + pdf)
-    count += get_potential_parking(text)
-
-print(count)
-    
 def get_parking_spaces(text):
     """ 
     This function takes text extracted from a CO PDF, searches for patterns
     that indicate there's parking present and returns the number of spaces.
     """ 
-    pattern1 = re.compile(r"Type and number of open spaces:\nParking spaces \((\d+)\)").search(text)
-    pattern2 = re.compile(r"/\((\d+)\)\s*(?i)accessory parking spaces").search(text)
-        
-    if pattern1: 
-        spaces = pattern1.group(1)
-    elif pattern2:
-        spaces = pattern2.group(1) # need to make sure its the first occurence
-        spaces = 'pattern not found'
-    return spaces
+    pattern_li = [r"typeandnumberofopenspaces:\nparkingspaces\((\d+)\)", # type and number of open spaces: parking spaces (#)
+                  r"parkingfor\((\d+)\)car", # parking for (#) car
+                  r"parkingfor(\d+)car",
+                  r"parkingfor\((\d+)\)vehicle", # parking for (#) vehicle
+                  r"parkingfor(\d+)vehicle",
+                  r"parkingfor\((\d+)\)motorvehicle", # parking for (#) motor vehicle
+                  r"parkingfor(\d+)motorvehicle",
+                  r"\((\d+)\)accessoryparkingspace", # (#) accessory parking space
+                  r"(\d+)accessoryparkingspace",
+                  r"\((\d+)\)offstreetparkingspace", # (#) off street parking space
+                  r"(\d+)offstreetparkingspace", 
+                  r"\((\d+)\)openparkingspace", # (#) open parking space
+                  r"(\d+)openparkingspace", 
+                  r"\((\d+)\)openspaceparking", # (#) open space parking
+                  r"(\d+)openspaceparking", 
+                  r"\((\d+)\)parkingspace", # (#) parking space, NEED TO IGNORE FOR BIKES
+                  r"(\d+)parkingspace",
+                  r"\((\d+)\)cargarage", # (#) car garage, ONE CAR GARAGE THREE PARKING SPACE
+                  r"(\d+)cargarage",
+                  r"(?<!(?:bicycle))parkingspace(|s)\((\d+)\)", # parking space/s (#), NOT bicycle parking space/s
+                  r"(?<!(?:bicycle))parkingspace(|s)(\d+)"]
+                               
+    for pattern in pattern_li:
+        p = re.compile(pattern).search(text)
+        if p: 
+            spaces = p.group(1)
+            return spaces    
 
-spaces_df = pd.DataFrame(columns = ['bin', 'spaces'])
+pdfs_path = path + 'output/pdfs_test/'
+potential_parking = 0
+spaces_df = pd.DataFrame(columns = ['filename', 'bin', 'du', 'spaces'])
 
-for pdf in os.listdir(path + 'output/pdfs_test/'):
-    text = extract_text(path + 'output/pdfs_test/' + pdf)
+for pdf in os.listdir(pdfs_path):
+    text = get_text(pdfs_path + pdf)
+    potential_parking += get_potential_parking(text)
+    
+    binum_pattern = re.compile(r"buildingidentificationnumber\(bin\):(\d+)").search(text)
+    du_pattern = re.compile(r"no\.ofdwellingunits:\n\n(\d+)").search(text)
+    
     spaces_df = spaces_df.append({'filename': pdf.split('.', 1)[0],
-                                 'spaces': get_parking_spaces(text)},
+                                  'bin': binum_pattern.group(1),
+                                  'du': du_pattern.group(1),
+                                  'spaces': get_parking_spaces(text)},
                                  ignore_index = True)
-       
-
-# no co 
+    
+print(f'potential parking count: {potential_parking}')
