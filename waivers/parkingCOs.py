@@ -23,7 +23,8 @@ import os
 from pdfminer.high_level import extract_text
 from text_to_num import alpha2digit
 
-path = 'C:/Users/M_Free/Desktop/td-parking/waivers/'
+path = '/Users/m_free/Desktop/GitHub/td-parking/waivers/'
+# path = 'C:/Users/M_Free/Desktop/td-parking/waivers/'
 # path = '/Users/Work/Desktop/GitHub/td-parking/waivers/'
 
 #%% Download CO PDFs
@@ -123,27 +124,26 @@ def get_co_url(filename):
     jobnum2 = filename[3:6] + '000'
     jobnum3 = filename 
 
-    # url = f'https://a810-bisweb.nyc.gov/bisweb/CofoDocumentContentServlet?cofomatadata1=cofo&cofomatadata2={boro}&cofomatadata3={jobnum1}&cofomatadata4={jobnum2}&cofomatadata5={jobnum3}.PDF'
     url = (f'https://a810-bisweb.nyc.gov/bisweb/CofoDocumentContentServlet?'
             f'cofomatadata1=cofo&cofomatadata2={boro}&cofomatadata3={jobnum1}'
             f'&cofomatadata4={jobnum2}&cofomatadata5={jobnum3}.PDF')
 
     return url
 
-# def download_co_pdf(url, binum):
-#     """ 
-#     This function takes a BIN and a string query to access a PDF of that
-#     property's CO and downloads the file to a folder. 
-    
-#     Note: Python modules like requests or urllib couldn't read the online 
-#     PDFs. Either a text extraction not allowed error would appear or the
-#     code would "run" and never execute. As a workaround, this function runs 
-#     a js file that reads the PDFs. 
-#     """ 
-#     node = '/usr/local/bin/node'
-#     js = path + 'input/pdf-reader/index.js'
-#     output = path + 'output/pdfs' 
-#     subprocess.Popen([node, js, url, binum, output]).wait()
+def download_co_pdf(url, binum):
+    """ 
+    This function takes a BIN and a string query to access a PDF of that
+    property's CO and downloads the file to a folder. 
+   
+    Note: Python modules like requests or urllib couldn't read the online 
+    PDFs. Either a text extraction not allowed error would appear or the
+    code would "run" and never execute. As a workaround, this function runs 
+    a js file that reads the PDFs. 
+    """ 
+    node = '/usr/local/bin/node'
+    js = path + 'input/pdf-reader/index.js'
+    output = path + 'output/pdfs' 
+    subprocess.Popen([node, js, url, binum, output]).wait()
 
 test_df = pd.DataFrame(columns = ['bin', 'filename', 'url'])
 
@@ -151,7 +151,7 @@ for binum in binum_df['bin']:
     filenames = get_co_filenames(binum)
     filename = get_best_co_filename(filenames)
     url = get_co_url(filename[0])
-    # download_co_pdf(url, binum)
+    download_co_pdf(url, binum)
 
     test_df = test_df.append({'bin': binum,
                               'filename': filename[0],
