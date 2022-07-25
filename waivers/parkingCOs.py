@@ -11,6 +11,7 @@ actual (rather than required or effective) parking rates across the city.
 
 Last Modified: July 2022
 """
+
 import pandas as pd 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -29,7 +30,7 @@ path = '/Users/m_free/Desktop/GitHub/td-parking/waivers/'
 
 #%% Download CO PDFs
 
-binum_df = pd.read_csv(path + 'output/for_co_test.csv', dtype = str)
+binum_df = pd.read_csv(path + 'output/for_co.csv', dtype = str)
         
 def get_co_filenames(binum):  
     """ 
@@ -142,10 +143,10 @@ def download_co_pdf(url, binum):
     """ 
     node = '/usr/local/bin/node'
     js = path + 'input/pdf-reader/index.js'
-    output = path + 'output/pdfs' 
+    output = path + 'output/pdfs/' 
     subprocess.Popen([node, js, url, binum, output]).wait()
 
-test_df = pd.DataFrame(columns = ['bin', 'filename', 'url'])
+urls_df = pd.DataFrame(columns = ['bin', 'filename', 'url'])
 
 for binum in binum_df['bin']:
     filenames = get_co_filenames(binum)
@@ -153,9 +154,10 @@ for binum in binum_df['bin']:
     url = get_co_url(filename[0])
     download_co_pdf(url, binum)
 
-    test_df = test_df.append({'bin': binum,
-                              'filename': filename[0],
-                              'url': url},
+    urls_df = pd.concat([urls_df, 
+                         pd.DataFrame.from_records([{'bin': binum,
+                                                     'filename': filename[0],
+                                                     'url': url}])],
                              ignore_index = True)
     
 #%% Extract Parking Spaces From PDFs
@@ -169,7 +171,7 @@ def get_text(pdf_path):
     """ 
     text = extract_text(pdf_path) 
     text = alpha2digit(text, 'en') 
-    text = text.lower().replace('one', '1') 
+    text = text.lower().replace(' one ', '1') 
     text = text.replace(' ','')
     return text
 
@@ -212,30 +214,59 @@ def get_parking_spaces(text):
                   r"(\d+)parkingspace",
                   r"\((\d+)\)cargarage", # (#) car garage, ONE CAR GARAGE THREE PARKING SPACE
                   r"(\d+)cargarage",
-                  r"(?<!(?:bicycle))parkingspace(|s)\((\d+)\)", # parking space/s (#), NOT bicycle parking space/s
-                  r"(?<!(?:bicycle))parkingspace(|s)(\d+)"]
+                  r"(?<!(?:bicycle))parkingspaces\((\d+)\)", # parking spaces (#), NOT bicycle parking space/s
+                  r"(?<!(?:bicycle))parkingspaces(\d+)",
+                  r"(?<!(?:bicycle))parkingspace\((\d+)\)", # parking space (#), NOT bicycle parking space/s
+                  r"(?<!(?:bicycle))parkingspace(\d+)"]
                                
+    spaces = float('nan')
+    num = float('nan')
     for pattern in pattern_li:
         p = re.compile(pattern).search(text)
         if p: 
             spaces = p.group(1)
-            return spaces    
+            num = pattern_li.index(pattern) 
+            break
+    
+    return spaces, num    
 
 pdfs_path = path + 'output/pdfs_test/'
 potential_parking = 0
-spaces_df = pd.DataFrame(columns = ['filename', 'bin', 'du', 'spaces'])
+spaces_df = pd.DataFrame(columns = ['filename', 'bin', 'du', 'spaces', 'pattern'])
+try_again_df = pd.DataFrame(columns = ['filename'])
 
 for pdf in os.listdir(pdfs_path):
-    text = get_text(pdfs_path + pdf)
-    potential_parking += get_potential_parking(text)
+    try:
+        text = get_text(pdfs_path + pdf)
+        potential_parking += get_potential_parking(text)
     
-    binum_pattern = re.compile(r"buildingidentificationnumber\(bin\):(\d+)").search(text)
-    du_pattern = re.compile(r"no\.ofdwellingunits:\n\n(\d+)").search(text)
-    
-    spaces_df = spaces_df.append({'filename': pdf.split('.', 1)[0],
-                                  'bin': binum_pattern.group(1),
-                                  'du': du_pattern.group(1),
-                                  'spaces': get_parking_spaces(text)},
+        binum_pattern = re.compile(r"buildingidentificationnumber\(bin\):(\d+)").search(text)
+        du_pattern = re.compile(r"no\.ofdwellingunits:\n\n(\d+)").search(text)
+        
+        spaces_df = pd.concat([spaces_df,
+                               pd.DataFrame.from_records([{'filename': pdf.split('.', 1)[0],
+                                                           'bin': binum_pattern.group(1),
+                                                           'du': du_pattern.group(1),
+                                                           'spaces': get_parking_spaces(text)[0],
+                                                           'pattern': get_parking_spaces(text)[1]}])],
+                              ignore_index = True) 
+    except: 
+        try_again_df = pd.concat([try_again_df,
+                                  pd.DataFrame.from_records([{'filename': pdf}])],
                                  ignore_index = True)
+        
+# for pdf in os.listdir(pdfs_path):
+#     text = get_text(pdfs_path + pdf)
+#     potential_parking += get_potential_parking(text)
     
-print(f'potential parking count: {potential_parking}')
+#     binum_pattern = re.compile(r"buildingidentificationnumber\(bin\):(\d+)").search(text)
+#     du_pattern = re.compile(r"no\.ofdwellingunits:\n\n(\d+)").search(text)
+    
+#     spaces_df = pd.concat([spaces_df,
+#                            pd.DataFrame.from_records([{'filename': pdf.split('.', 1)[0],
+#                                                        'bin': binum_pattern.group(1),
+#                                                        'du': du_pattern.group(1),
+#                                                        'spaces': get_parking_spaces(text)[0],
+#                                                        'pattern': get_parking_spaces(text)[1]}])],
+#                            ignore_index = True) 
+
