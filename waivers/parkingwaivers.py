@@ -11,10 +11,11 @@ Last Modified: June 2022
 import pandas as pd
 from sodapy import Socrata
 import os
+import geopandas as gpd
 import numpy as np 
 
 path = 'C:/Users/M_Free/Desktop/td-parking/waivers/'
-local_path = 'C:/Users/M_Free/OneDrive - NYC O365 HOSTED/Projects/'
+local_path = 'C:/Users/M_Free/OneDrive - NYC O365 HOSTED/Projects/Parking/Waivers/'
 
 # DCP proxy
 usernm = pd.read_csv('C:/Users/M_Free/Desktop/key.csv', dtype = str).loc[0, 'username']
@@ -32,36 +33,41 @@ client = Socrata(data_link, app_token)
 
 #%% Effective Parking: Data Download
 
-# # import and filter housing database
-# hdb_df = pd.read_csv(local_path + 'Parking/Waivers/HousingDB/HousingDB_post2010_completed_jobs.csv', dtype = str)
-# hdb_df = hdb_df[hdb_df['Job_Type'] == 'New Building']
+# import and filter housing database
+hdb_df = pd.read_csv(local_path + 'HousingDB/HousingDB_post2010_completed_jobs.csv', dtype = str)
+hdb_cond = (hdb_df['Job_Type'] == 'New Building') & (hdb_df['Job_Status'] == '5. Completed Construction') & (hdb_df['ClassAProp'] > '0')
+hdb_df = hdb_df[hdb_cond]
 
-# cols = ['BBL',
-#         'BIN',
-#         'CompltYear',
-#         'UnitsCO',
-#         'ZoningDst1',
-#         'ZoningDst2',
-#         'SpeclDst2',
-#         'CommntyDst',
-#         'Latitude',
-#         'Longitude']
+cols = ['BBL',
+        'BIN',
+        'Job_Number',
+        'CompltYear',
+        'ClassAProp',
+        'UnitsCO',
+        'ZoningDst1',
+        'ZoningDst2',
+        'SpeclDst2',
+        'CommntyDst',
+        'Latitude',
+        'Longitude']
 
-# hdb_df = hdb_df[cols]
+hdb_df = hdb_df[cols]
 
-# cols_di = {'CompltYear': 'year',
-#             'UnitsCO': 'units',
-#             'ZoningDst1': 'zonedist',
-#             'ZoningDst2': 'zonedistb',
-#             'SpeclDst2': 'spdist',
-#             'CommntyDst': 'cd',
-#             'Latitude': 'lat',
-#             'Longitude': 'long'}
+cols_di = {'Job_Number': 'jobnum',
+           'CompltYear': 'year',
+           'ClassAProp': 'units',
+           'UnitsCO': 'counits',
+           'ZoningDst1': 'zonedist',
+           'ZoningDst2': 'zonedistb',
+           'SpeclDst2': 'spdist',
+           'CommntyDst': 'cd',
+           'Latitude': 'lat',
+           'Longitude': 'long'}
 
-# hdb_df.rename(columns = cols_di, inplace = True)
-# hdb_df.columns = hdb_df.columns.str.lower()
+hdb_df.rename(columns = cols_di, inplace = True)
+hdb_df.columns = hdb_df.columns.str.lower()
 
-# # import and filter PLUTO
+# import and filter PLUTO
 # data_id = '64uk-42ks'
 # results = client.get(data_id, limit = 860000)
 # pluto_df = pd.DataFrame.from_records(results)
@@ -79,10 +85,16 @@ client = Socrata(data_link, app_token)
 
 # pluto_df = pluto_df[cols]
 
-# # merge dfs and export 
+# merge dfs and export 
 # pluto_df['bbl'] = pluto_df['bbl'].str.split('.').str.get(-2)
-# reslots_df = pd.merge(hdb_df, pluto_df, how = 'inner', on = 'bbl') # need to fix: lose ~150 rows 
+# reslots_df = pd.merge(hdb_df, pluto_df, how = 'inner', on = 'bbl') # need to fix: lose 165 rows
 # reslots_df.to_csv(path + 'input/reslots.csv', index = False)
+
+# OR spatial join 
+points = gpd.GeoDataFrame(hdb_df, geometry = gpd.points_from_xy(hdb_df.long, hdb_df.lat))
+polys = gpd.GeoDataFrame(pluto_df, geometry = 'geom', crs = 'EPSG:2263' ) #need mappluto
+
+reslots_df = gpd.sjoin(points, polys, how = 'left')
 
 #%% Effective Parking: Data Cleaning
 
@@ -215,7 +227,7 @@ reslots_df['reqpark'] = reslots_df.apply(lambda row: get_required_parking(row), 
 reslots_df['reqspaces'] = ((reslots_df['units'] * reslots_df['reqpark']) + .5).astype(int) # rounding
 
 # export for co analysis 
-# for_co = reslots_df[['bbl', 'bin', 'year', 'units', 'parktype']]
+# for_co = reslots_df[['bbl', 'bin', 'jobnum', 'year', 'units', 'counits', 'parktype']]
 # for_co.to_csv(path + 'output/for_co.csv', index = False)
  
 #%% Effective Parking: Spaces Waived 
