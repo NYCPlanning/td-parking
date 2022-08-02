@@ -5,7 +5,7 @@ Required vs. Effective (with Waivers) Parking Rates
 New Buildings Completed Between 2010 and 2020
 
 Assumptions: All Market Rate Units, No Special Districts
-Last Modified: June 2022
+Last Modified: August 2022
 """
 import pandas as pd
 import geopandas as gpd
@@ -17,70 +17,70 @@ local_path = 'C:/Users/M_Free/OneDrive - NYC O365 HOSTED/Projects/Parking/Waiver
 
 #%% Effective Parking: Data Download
 
-# import and filter housing database
-hdb_df = pd.read_csv(local_path + 'HousingDB/HousingDB_post2010_completed_jobs.csv', dtype = str)
-hdb_cond = (hdb_df['Job_Type'] == 'New Building') & (hdb_df['Job_Status'] == '5. Completed Construction') & (hdb_df['ClassAProp'] > '0')
-hdb_df = hdb_df[hdb_cond]
+# # import and filter housing database
+# hdb_df = pd.read_csv(local_path + 'HousingDB/HousingDB_post2010_completed_jobs.csv', dtype = str)
+# hdb_cond = (hdb_df['Job_Type'] == 'New Building') & (hdb_df['Job_Status'] == '5. Completed Construction') & (hdb_df['ClassAProp'] > '0')
+# hdb_df = hdb_df[hdb_cond]
 
-cols = ['BBL',
-        'BIN',
-        'Job_Number',
-        'CompltYear',
-        'ClassAProp',
-        'UnitsCO',
-        'ZoningDst1',
-        'ZoningDst2',
-        'SpeclDst2',
-        'CommntyDst',
-        'Latitude',
-        'Longitude']
+# cols = ['BBL',
+#         'BIN',
+#         'Job_Number',
+#         'CompltYear',
+#         'ClassAProp',
+#         'UnitsCO',
+#         'ZoningDst1',
+#         'ZoningDst2',
+#         'SpeclDst1',
+#         'CommntyDst',
+#         'Latitude',
+#         'Longitude']
 
-hdb_df = hdb_df[cols]
+# hdb_df = hdb_df[cols]
 
-cols_di = {'Job_Number': 'jobnum',
-           'CompltYear': 'year',
-           'ClassAProp': 'units',
-           'UnitsCO': 'counits',
-           'ZoningDst1': 'zonedist',
-           'ZoningDst2': 'zonedistb',
-           'SpeclDst2': 'spdist',
-           'CommntyDst': 'cd',
-           'Latitude': 'lat',
-           'Longitude': 'long'}
+# cols_di = {'Job_Number': 'jobnum',
+#            'CompltYear': 'year',
+#            'ClassAProp': 'units',
+#            'UnitsCO': 'counits',
+#            'ZoningDst1': 'zonedist',
+#            'ZoningDst2': 'zonedistb',
+#            'SpeclDst1': 'spdist',
+#            'CommntyDst': 'cd',
+#            'Latitude': 'lat',
+#            'Longitude': 'long'}
 
-hdb_df.rename(columns = cols_di, inplace = True)
-hdb_df.columns = hdb_df.columns.str.lower()
+# hdb_df.rename(columns = cols_di, inplace = True)
+# hdb_df.columns = hdb_df.columns.str.lower()
 
-hdb_gdf = gpd.GeoDataFrame(hdb_df, geometry = gpd.points_from_xy(hdb_df.long, hdb_df.lat), crs = 'EPSG:4326')
+# hdb_gdf = gpd.GeoDataFrame(hdb_df, geometry = gpd.points_from_xy(hdb_df.long, hdb_df.lat), crs = 'EPSG:4326')
 
-# import and filter mappluto
-cols = ['BBL', 
-        'LotArea',
-        'LotFront',
-        'LotType',
-        'BldgClass',
-        'ZoneDist1',
-        'ZoneDist2',
-        'Overlay1',
-        'SPDist1',
-        'SplitZone',
-        'geometry']
+# # import and filter mappluto
+# cols = ['BBL', 
+#         'LotArea',
+#         'LotFront',
+#         'LotType',
+#         'BldgClass',
+#         'ZoneDist1',
+#         'Overlay1',
+#         'SPDist1',
+#         'geometry']
 
-pluto_gdf = gpd.read_file('C:/Users/M_Free/Downloads/nyc_mappluto_22v1_shp.zip')
-pluto_gdf = pluto_gdf[cols]
-pluto_gdf = pluto_gdf.set_geometry('geometry')
-pluto_gdf = pluto_gdf.to_crs('EPSG:4326')
+# pluto_gdf = gpd.read_file('C:/Users/M_Free/Downloads/nyc_mappluto_22v1_shp.zip')
+# pluto_gdf = pluto_gdf[cols]
+# pluto_gdf.rename(columns = {'BBL': 'bbl_pluto'}, inplace = True)
+# pluto_gdf.columns = pluto_gdf.columns.str.lower()
+# pluto_gdf = pluto_gdf.set_geometry('geometry')
+# pluto_gdf = pluto_gdf.to_crs('EPSG:4326')
 
-# plot points (housing) and polygons (pluto)
-fig, ax = plt.subplots()
-ax.set_aspect('equal')
-pluto_gdf.plot(ax = ax, color = 'white', edgecolor = 'black')
-hdb_gdf.plot(ax = ax, marker = 'o', color = 'red', markersize = 5)
-plt.show()
+# # plot points (housing) and polygons (pluto)
+# fig, ax = plt.subplots()
+# ax.set_aspect('equal')
+# pluto_gdf.plot(ax = ax, color = 'white', edgecolor = 'black')
+# hdb_gdf.plot(ax = ax, marker = 'o', color = 'red', markersize = 5)
+# plt.show()
 
-# spatially join the housing database and mappluto
-reslots_df = gpd.sjoin(hdb_gdf, pluto_gdf, how = 'left')
-reslots_df.to_csv(path + 'input/reslots.csv', index = False)
+# # spatially join the housing database and mappluto
+# reslots_df = gpd.sjoin(hdb_gdf, pluto_gdf, how = 'left')
+# reslots_df.to_csv(path + 'input/reslots.csv', index = False)
 
 #%% Effective Parking: Data Cleaning
 
@@ -288,4 +288,4 @@ req_results['% waiverspaces'] = req_results['waiverspaces'] / req_results.loc['t
 req_results['reqrate'] = round(req_results['reqspaces'] / req_results['units'], 3)
 req_results['waiverrate'] = round(req_results['waiverspaces'] / req_results['units'], 3)
 
-reslots_df['waivertype'].sum()
+reslots_df['waivertype'].value_counts()
