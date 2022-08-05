@@ -9,7 +9,7 @@ that property's most recent CO from DOB Building Information Search (BIS)
 portal. It then reads the number of parking spaces built to approximate 
 actual (rather than required or effective) parking rates across the city.   
 
-Last Modified: July 2022
+Last Modified: August 2022
 """
 
 import pandas as pd 
@@ -24,44 +24,12 @@ import os
 from pdfminer.high_level import extract_text
 from text_to_num import alpha2digit
 
-# path = '/Users/m_free/Desktop/GitHub/td-parking/waivers/'
-path = 'C:/Users/M_Free/Desktop/td-parking/waivers/'
-# path = '/Users/Work/Desktop/GitHub/td-parking/waivers/'
+path = '/Users/m_free/Desktop/GitHub/td-parking/waivers/'
+# path = 'C:/Users/M_Free/Desktop/td-parking/waivers/'
 
 #%% Download CO PDFs
 
 binum_df = pd.read_csv(path + 'output/for_co_test.csv', dtype = str)
-
-# def get_co_filenames(binum):  
-#     """ 
-#     This function takes a BIN to create a string query that accesses the
-#     CO PDF listing for that property and returns a list of filenames.
-    
-#     Note: BIS uses load balancer that shows a wait screen when traffic is
-#     high and prevents data from being extracted with the requests module.
-#     Selenium, however, can wait until the CO PDF listing page loads. 
-#     """    
-#     s = Service(path + 'input/chromedriver')
-#     browser = webdriver.Chrome(service = s)
-#     url = (f'https://a810-bisweb.nyc.gov/bisweb/COsByLocationServlet?'
-#             f'requestid=1&allbin={binum}')
-#     browser.get(url) 
-    
-#     try: 
-#         WebDriverWait(browser, 15).until(
-#             EC.title_is('C of O PDF Listing for Property'))                                               
-#         soup = BeautifulSoup(browser.page_source, 'html.parser')
-#         filenames = []
-#         file_pattern = re.compile(r".*((\.pdf)|(\.PDF))$")
-#         for link in soup.find_all('a'):
-#             if file_pattern.match(link.text):
-#                 filenames.append(link.text[:-4])
-#     except:
-#         filenames = ['no co']
-#     finally:
-#         browser.close()
-    
-#     return filenames
         
 def get_co_filenames(binum):  
     """ 
@@ -79,7 +47,7 @@ def get_co_filenames(binum):
     browser.get(url) 
     
     try: 
-        WebDriverWait(browser, 15).until(
+        WebDriverWait(browser, 30).until(
             EC.title_is('C of O PDF Listing for Property'))
     finally:                                               
         soup = BeautifulSoup(browser.page_source, 'html.parser')
@@ -174,23 +142,47 @@ def download_co_pdf(url, binum):
     """ 
     node = '/usr/local/bin/node'
     js = path + 'input/pdf-reader/index.js'
-    output = path + 'output/pdfs/' 
-    subprocess.Popen([node, js, url, binum, output]).wait()
+    output = path + 'output/pdfs_test/' 
+    subprocess.Popen([node, js, url, binum, output]).wait(timeout = 30)
 
 urls_df = pd.DataFrame(columns = ['bin', 'filename', 'url'])
+count = 0
 
 for binum in binum_df['bin']:
     filenames = get_co_filenames(binum)
     filename = get_best_co_filename(filenames)
-    url = get_co_url(filename[0])
-    download_co_pdf(url, binum)
+    
+    if len(filename) != 0:        
+        filename = filename[0]
+        url = get_co_url(filename)
+        download_co_pdf(url, binum)
+    else:
+        filename = 'no co'
+        url = 'no co'
 
     urls_df = pd.concat([urls_df, 
                          pd.DataFrame.from_records([{'bin': binum,
-                                                     'filename': filename[0],
+                                                     'filename': filename,
                                                      'url': url}])],
                              ignore_index = True)
     
+    count += 1
+    if count % 10 == 0:
+        print(f'progress: {count}')
+
+#%% Retry Bad PDF Downloads    
+  
+pdfs_path = path + 'output/pdfs_test/'
+
+for pdf in os.listdir(pdfs_path):
+    file = pdfs_path + pdf
+    size = os.path.getsize(file)
+    if size < 2000:
+        os.remove(file)
+        pdf = pdf.split('.', 1)[0]
+        url = urls_df.loc[urls_df['bin'] == pdf, 'url'].item()
+        download_co_pdf(url, pdf)
+
 #%% Extract Parking Spaces From PDFs
     
 def get_text(pdf_path):
@@ -264,7 +256,7 @@ def get_parking_spaces(text):
 pdfs_path = path + 'output/pdfs_test/'
 potential_parking = 0
 spaces_df = pd.DataFrame(columns = ['filename', 'bin', 'du', 'spaces', 'pattern'])
-try_again_df = pd.DataFrame(columns = ['filename'])
+bad_downloads_df = pd.DataFrame(columns = ['filename'])
 
 for pdf in os.listdir(pdfs_path):
     try:
@@ -282,22 +274,6 @@ for pdf in os.listdir(pdfs_path):
                                                            'pattern': get_parking_spaces(text)[1]}])],
                               ignore_index = True) 
     except: 
-        try_again_df = pd.concat([try_again_df,
-                                  pd.DataFrame.from_records([{'filename': pdf}])],
-                                 ignore_index = True)
-        
-# for pdf in os.listdir(pdfs_path):
-#     text = get_text(pdfs_path + pdf)
-#     potential_parking += get_potential_parking(text)
-    
-#     binum_pattern = re.compile(r"buildingidentificationnumber\(bin\):(\d+)").search(text)
-#     du_pattern = re.compile(r"no\.ofdwellingunits:\n\n(\d+)").search(text)
-    
-#     spaces_df = pd.concat([spaces_df,
-#                            pd.DataFrame.from_records([{'filename': pdf.split('.', 1)[0],
-#                                                        'bin': binum_pattern.group(1),
-#                                                        'du': du_pattern.group(1),
-#                                                        'spaces': get_parking_spaces(text)[0],
-#                                                        'pattern': get_parking_spaces(text)[1]}])],
-#                            ignore_index = True) 
-
+        bad_downloads_df = pd.concat([bad_downloads_df,
+                                      pd.DataFrame.from_records([{'filename': pdf}])],
+                                     ignore_index = True)
