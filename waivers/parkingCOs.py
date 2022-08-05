@@ -24,13 +24,44 @@ import os
 from pdfminer.high_level import extract_text
 from text_to_num import alpha2digit
 
-path = '/Users/m_free/Desktop/GitHub/td-parking/waivers/'
-# path = 'C:/Users/M_Free/Desktop/td-parking/waivers/'
+# path = '/Users/m_free/Desktop/GitHub/td-parking/waivers/'
+path = 'C:/Users/M_Free/Desktop/td-parking/waivers/'
 # path = '/Users/Work/Desktop/GitHub/td-parking/waivers/'
 
 #%% Download CO PDFs
 
-binum_df = pd.read_csv(path + 'output/for_co.csv', dtype = str)
+binum_df = pd.read_csv(path + 'output/for_co_test.csv', dtype = str)
+
+# def get_co_filenames(binum):  
+#     """ 
+#     This function takes a BIN to create a string query that accesses the
+#     CO PDF listing for that property and returns a list of filenames.
+    
+#     Note: BIS uses load balancer that shows a wait screen when traffic is
+#     high and prevents data from being extracted with the requests module.
+#     Selenium, however, can wait until the CO PDF listing page loads. 
+#     """    
+#     s = Service(path + 'input/chromedriver')
+#     browser = webdriver.Chrome(service = s)
+#     url = (f'https://a810-bisweb.nyc.gov/bisweb/COsByLocationServlet?'
+#             f'requestid=1&allbin={binum}')
+#     browser.get(url) 
+    
+#     try: 
+#         WebDriverWait(browser, 15).until(
+#             EC.title_is('C of O PDF Listing for Property'))                                               
+#         soup = BeautifulSoup(browser.page_source, 'html.parser')
+#         filenames = []
+#         file_pattern = re.compile(r".*((\.pdf)|(\.PDF))$")
+#         for link in soup.find_all('a'):
+#             if file_pattern.match(link.text):
+#                 filenames.append(link.text[:-4])
+#     except:
+#         filenames = ['no co']
+#     finally:
+#         browser.close()
+    
+#     return filenames
         
 def get_co_filenames(binum):  
     """ 
