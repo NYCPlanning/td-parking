@@ -29,7 +29,7 @@ path = '/Users/m_free/Desktop/GitHub/td-parking/waivers/'
 
 #%% Download CO PDFs
 
-binum_df = pd.read_csv(path + 'output/for_co_test.csv', dtype = str)
+binum_df = pd.read_csv(path + 'output/for_co_waivers.csv', dtype = str)
         
 def get_co_filenames(binum):  
     """ 
@@ -80,8 +80,12 @@ def get_best_co_filename(filenames):
             continue
         elif 'TCO' in link:
             splitby = 'TCO'
+        elif 'TOO' in link:
+            splitby = 'TOO'
         elif '-T-' in link:
             splitby = '-T-'
+        elif 'TT' in link:
+            splitby = 'TT'
         elif 'T' in link:
             splitby = 'T'
         elif '-' in link:
@@ -142,13 +146,13 @@ def download_co_pdf(url, binum):
     """ 
     node = '/usr/local/bin/node'
     js = path + 'input/pdf-reader/index.js'
-    output = path + 'output/pdfs_test/' 
+    output = path + 'output/pdfs_waivers/' 
     subprocess.Popen([node, js, url, binum, output]).wait(timeout = 30)
 
 urls_df = pd.DataFrame(columns = ['bin', 'filename', 'url'])
 count = 0
 
-for binum in binum_df['bin']:
+for binum in binum_df[1757:]['bin']: #ended on index 1756, bin 3068624
     filenames = get_co_filenames(binum)
     filename = get_best_co_filename(filenames)
     
@@ -172,7 +176,7 @@ for binum in binum_df['bin']:
 
 #%% Retry Bad PDF Downloads    
   
-pdfs_path = path + 'output/pdfs_test/'
+pdfs_path = path + 'output/pdfs_waivers/'
 
 for pdf in os.listdir(pdfs_path):
     file = pdfs_path + pdf
@@ -253,7 +257,7 @@ def get_parking_spaces(text):
     
     return spaces, num    
 
-pdfs_path = path + 'output/pdfs_test/'
+pdfs_path = path + 'output/pdfs_waivers/'
 potential_parking = 0
 spaces_df = pd.DataFrame(columns = ['filename', 'bin', 'du', 'spaces', 'pattern'])
 bad_downloads_df = pd.DataFrame(columns = ['filename'])
