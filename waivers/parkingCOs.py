@@ -23,13 +23,13 @@ import subprocess
 import os 
 from pdfminer.high_level import extract_text
 from text_to_num import alpha2digit
+from tqdm import tqdm
 
-path = '/Users/m_free/Desktop/GitHub/td-parking/waivers/'
+# path = '/Users/m_free/Desktop/GitHub/td-parking/waivers/'
 # path = 'C:/Users/M_Free/Desktop/td-parking/waivers/'
+path = '/Users/Work/Desktop/GitHub/td-parking/waivers/'
 
-#%% Download CO PDFs
-
-binum_df = pd.read_csv(path + 'output/for_co_waivers.csv', dtype = str)
+#%% Create Helper Functions
         
 def get_co_filenames(binum):  
     """ 
@@ -40,7 +40,8 @@ def get_co_filenames(binum):
     high and prevents data from being extracted with the requests module.
     Selenium, however, can wait until the CO PDF listing page loads. 
     """    
-    s = Service(path + 'input/chromedriver')
+    # s = Service(path + 'input/chromedriver')
+    s = Service('/Users/Work/Desktop/GitHub/td-parking/waivers/input/chromedriver')
     browser = webdriver.Chrome(service = s)
     url = (f'https://a810-bisweb.nyc.gov/bisweb/COsByLocationServlet?'
             f'requestid=1&allbin={binum}')
@@ -61,7 +62,7 @@ def get_co_filenames(binum):
     
     return filenames
 
-def get_best_co_filename(filenames):
+def get_best_co_filenames(filenames):
     """ 
     This function takes a list of filenames and returns the name of the 
     final CO (JobNumber.PDF, JobNumberF.PDF) or if not available, 
@@ -111,7 +112,22 @@ def get_best_co_filename(filenames):
             filestoreturn.append(key + '-' + jobitem_di[key])
     
     return filestoreturn
+
+def get_best_co_filename_url(best_filenames, jobnum):
+    """ 
+    Description... match job number, no co 
+    """
+    filename = 'no co'
+   
+    for name in best_filenames:
+        if name.startswith(jobnum):
+            filename = name
+            break
+        else:
+            filename = 'diff job num'
     
+    return filename
+
 def get_co_url(filename):
     """ 
     This function takes the best CO filename and returns a string query to
@@ -147,32 +163,47 @@ def download_co_pdf(url, binum):
     node = '/usr/local/bin/node'
     js = path + 'input/pdf-reader/index.js'
     output = path + 'output/pdfs_waivers/' 
-    subprocess.Popen([node, js, url, binum, output]).wait(timeout = 30)
-
-urls_df = pd.DataFrame(columns = ['bin', 'filename', 'url'])
-count = 0
-
-for binum in binum_df[1757:]['bin']: #ended on index 1756, bin 3068624
-    filenames = get_co_filenames(binum)
-    filename = get_best_co_filename(filenames)
     
-    if len(filename) != 0:        
-        filename = filename[0]
-        url = get_co_url(filename)
-        download_co_pdf(url, binum)
+    try:
+        subprocess.Popen([node, js, url, binum, output]).wait(timeout = 30)
+    except subprocess.TimeoutExpired:
+        print('bin not downloaded: ' + binum)
+    
+#%% Download CO PDFs 
+
+binum_df = pd.read_csv(path + 'output/for_co_waivers.csv', dtype = str)
+binum_df = binum_df[1806:1816]
+urls_df = pd.DataFrame(columns = ['bin', 'filename', 'url'])
+
+for index, row in tqdm(binum_df.iterrows(), total = len(binum_df)): 
+    
+    filenames = get_co_filenames(row['bin'])
+    best_filenames = get_best_co_filenames(filenames)
+    best_filename = get_best_co_filename_url(best_filenames, row['jobnum'])
+    
+    if (best_filename == 'no co') | (best_filename == 'diff job num'):
+        url = ''
     else:
-        filename = 'no co'
-        url = 'no co'
+        url = get_co_url(best_filename)
+        download_co_pdf(url, row['bin'] )
 
     urls_df = pd.concat([urls_df, 
-                         pd.DataFrame.from_records([{'bin': binum,
-                                                     'filename': filename,
+                         pd.DataFrame.from_records([{'bin': row['bin'],
+                                                     'filename': best_filename,
                                                      'url': url}])],
-                             ignore_index = True)
-    
-    count += 1
-    if count % 10 == 0:
-        print(f'progress: {count}')
+                        ignore_index = True)
+
+#%% Download CO PDFs - Single Project
+
+binum = '1087979'
+jobnum = '104603216'
+
+filenames = get_co_filenames(binum)
+best_filenames = get_best_co_filenames(filenames)
+best_filename = get_best_co_filename_url(best_filenames)
+url = get_co_url(best_filename)
+
+download_co_pdf(url, binum)
 
 #%% Retry Bad PDF Downloads    
   
@@ -281,3 +312,4 @@ for pdf in os.listdir(pdfs_path):
         bad_downloads_df = pd.concat([bad_downloads_df,
                                       pd.DataFrame.from_records([{'filename': pdf}])],
                                      ignore_index = True)
+

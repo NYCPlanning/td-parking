@@ -23,7 +23,6 @@ axios({
         }
       }
     }
-    console.log(`Done with ${fileName}!`)
   } catch (err) {
     console.error(err);
   }
