@@ -1,87 +1,85 @@
 # -*- coding: utf-8 -*-
 """
 Accessory Off-Street Parking for Residences:
-Effective (Required by Zoning) vs. Actual Spaces Built
-2010-Present
+Required vs. Effective (with Waivers) Parking Rates
+New Buildings Completed Between 2010 and 2020
 
 Assumptions: All Market Rate Units, No Special Districts
-Last Modified: June 2022
+Last Modified: August 2022
 """
-
 import pandas as pd
-from sodapy import Socrata
-import os
+import geopandas as gpd
+import matplotlib.pyplot as plt
 import numpy as np 
 
 path = 'C:/Users/M_Free/Desktop/td-parking/waivers/'
-local_path = 'C:/Users/M_Free/OneDrive - NYC O365 HOSTED/Projects/'
-
-# DCP proxy
-usernm = pd.read_csv('C:/Users/M_Free/Desktop/key.csv', dtype = str).loc[0, 'username']
-passwd = pd.read_csv('C:/Users/M_Free/Desktop/key.csv', dtype = str).loc[0, 'password']
-p = 'http://'+str(usernm)+':'+str(passwd)+'@dcpproxy1.dcp.nycnet:8080'
-os.environ['http_proxy'] = p 
-os.environ['HTTP_PROXY'] = p
-os.environ['https_proxy'] = p
-os.environ['HTTPS_PROXY'] = p
-
-#Socrata API 
-data_link = 'data.cityofnewyork.us'
-app_token = pd.read_csv('C:/Users/M_Free/Desktop/key_opendata.csv', dtype = str).loc[0, 'token']
-client = Socrata(data_link, app_token)
+local_path = 'C:/Users/M_Free/OneDrive - NYC O365 HOSTED/Projects/Parking/Waivers/'
 
 #%% Effective Parking: Data Download
 
 # # import and filter housing database
-# hdb_df = pd.read_csv(local_path + 'Parking/Waivers/HousingDB/HousingDB_post2010_completed_jobs.csv', dtype = str)
-# hdb_df = hdb_df[hdb_df['Job_Type'] == 'New Building']
+# hdb_df = pd.read_csv(local_path + 'HousingDB/HousingDB_post2010_completed_jobs.csv', dtype = str)
+# hdb_cond = (hdb_df['Job_Type'] == 'New Building') & (hdb_df['Job_Status'] == '5. Completed Construction') & (hdb_df['ClassAProp'] > '0')
+# hdb_df = hdb_df[hdb_cond]
 
 # cols = ['BBL',
 #         'BIN',
+#         'Job_Number',
 #         'CompltYear',
+#         'ClassAProp',
 #         'UnitsCO',
 #         'ZoningDst1',
 #         'ZoningDst2',
-#         'SpeclDst2',
+#         'SpeclDst1',
 #         'CommntyDst',
 #         'Latitude',
 #         'Longitude']
 
 # hdb_df = hdb_df[cols]
 
-# cols_di = {'CompltYear': 'year',
-#             'UnitsCO': 'units',
-#             'ZoningDst1': 'zonedist',
-#             'ZoningDst2': 'zonedistb',
-#             'SpeclDst2': 'spdist',
-#             'CommntyDst': 'cd',
-#             'Latitude': 'lat',
-#             'Longitude': 'long'}
+# cols_di = {'Job_Number': 'jobnum',
+#            'CompltYear': 'year',
+#            'ClassAProp': 'units',
+#            'UnitsCO': 'counits',
+#            'ZoningDst1': 'zonedist',
+#            'ZoningDst2': 'zonedistb',
+#            'SpeclDst1': 'spdist',
+#            'CommntyDst': 'cd',
+#            'Latitude': 'lat',
+#            'Longitude': 'long'}
 
 # hdb_df.rename(columns = cols_di, inplace = True)
 # hdb_df.columns = hdb_df.columns.str.lower()
 
-# # import and filter PLUTO
-# data_id = '64uk-42ks'
-# results = client.get(data_id, limit = 860000)
-# pluto_df = pd.DataFrame.from_records(results)
+# hdb_gdf = gpd.GeoDataFrame(hdb_df, geometry = gpd.points_from_xy(hdb_df.long, hdb_df.lat), crs = 'EPSG:4326')
 
-# cols = ['bbl', 
-#         'lotarea',
-#         'lotfront',
-#         'lottype',
-#         'bldgclass',
-#         'zonedist1',
-#         'zonedist2',
-#         'overlay1',
-#         'spdist1',
-#         'splitzone']
+# # import and filter mappluto
+# cols = ['BBL', 
+#         'LotArea',
+#         'LotFront',
+#         'LotType',
+#         'BldgClass',
+#         'ZoneDist1',
+#         'Overlay1',
+#         'SPDist1',
+#         'geometry']
 
-# pluto_df = pluto_df[cols]
+# pluto_gdf = gpd.read_file('C:/Users/M_Free/Downloads/nyc_mappluto_22v1_shp.zip')
+# pluto_gdf = pluto_gdf[cols]
+# pluto_gdf.rename(columns = {'BBL': 'bbl_pluto'}, inplace = True)
+# pluto_gdf.columns = pluto_gdf.columns.str.lower()
+# pluto_gdf = pluto_gdf.set_geometry('geometry')
+# pluto_gdf = pluto_gdf.to_crs('EPSG:4326')
 
-# # merge dfs and export 
-# pluto_df['bbl'] = pluto_df['bbl'].str.split('.').str.get(-2)
-# reslots_df = pd.merge(hdb_df, pluto_df, how = 'inner', on = 'bbl') # need to fix: lose ~150 rows 
+# # plot points (housing) and polygons (pluto)
+# fig, ax = plt.subplots()
+# ax.set_aspect('equal')
+# pluto_gdf.plot(ax = ax, color = 'white', edgecolor = 'black')
+# hdb_gdf.plot(ax = ax, marker = 'o', color = 'red', markersize = 5)
+# plt.show()
+
+# # spatially join the housing database and mappluto
+# reslots_df = gpd.sjoin(hdb_gdf, pluto_gdf, how = 'left')
 # reslots_df.to_csv(path + 'input/reslots.csv', index = False)
 
 #%% Effective Parking: Data Cleaning
@@ -215,7 +213,7 @@ reslots_df['reqpark'] = reslots_df.apply(lambda row: get_required_parking(row), 
 reslots_df['reqspaces'] = ((reslots_df['units'] * reslots_df['reqpark']) + .5).astype(int) # rounding
 
 # export for co analysis 
-# for_co = reslots_df[['bbl', 'bin', 'year', 'units', 'parktype']]
+# for_co = reslots_df[['bbl', 'bin', 'jobnum', 'year', 'units', 'counits', 'parktype']]
 # for_co.to_csv(path + 'output/for_co.csv', index = False)
  
 #%% Effective Parking: Spaces Waived 
@@ -270,7 +268,10 @@ def get_waiver_parking(row):
 
 reslots_df['waiverspaces'] = reslots_df.apply(lambda row: get_waiver_parking(row), axis = 1)
 
-#%% Required/Waived Parking Results 
+# waivers = reslots_df[['bbl', 'units', 'zonedistadj', 'parktype', 'reqspaces', 'waiverspaces', 'lat', 'long']]
+# waivers.to_csv(path + 'output/waivers.csv', index = False)
+
+#%% Required/Effective Parking Results 
  
 req_results = reslots_df[['parktype', 'units']].groupby(['parktype']).count().rename(columns = {'units': 'developments'})
 sum_results = reslots_df[['parktype', 'units', 'reqspaces', 'waiverspaces']].groupby(['parktype']).sum()
@@ -287,4 +288,4 @@ req_results['% waiverspaces'] = req_results['waiverspaces'] / req_results.loc['t
 req_results['reqrate'] = round(req_results['reqspaces'] / req_results['units'], 3)
 req_results['waiverrate'] = round(req_results['waiverspaces'] / req_results['units'], 3)
 
-reslots_df['waivertype'].sum()
+reslots_df['waivertype'].value_counts()

@@ -1,56 +1,72 @@
 # -*- coding: utf-8 -*-
 """
-Certificate of Occupancy Reader:
-Given a BIN, return the number of residential parking spaces on the most recent CO.   
+Accessory Off-Street Parking for Residences: 
+Certificate of Occupany (CO) Parking Rates 
+New Buildings Completed Between 2010 and 2020
+
+Given a Building Information Number (BIN), this script finds and downloads 
+that property's most recent CO from DOB Building Information Search (BIS)
+portal. It then reads the number of parking spaces built to approximate 
+actual (rather than required or effective) parking rates across the city.   
+
+Last Modified: August 2022
 """
+
 import pandas as pd 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-import time
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 import re 
-import io
-import urllib.request
-from pdfminer.high_level import extract_text
-import requests
-
 import subprocess
+import os 
+from pdfminer.high_level import extract_text
+from text_to_num import alpha2digit
 
-# DCP proxy
-# usernm = pd.read_csv('C:/Users/M_Free/Desktop/key.csv', dtype = str).loc[0, 'username']
-# passwd = pd.read_csv('C:/Users/M_Free/Desktop/key.csv', dtype = str).loc[0, 'password']
-# p={'http':'http://'+str(usernm)+':'+str(passwd)+'@dcpproxy1.dcp.nycnet:8080',
-#     'https':'http://'+str(usernm)+':'+str(passwd)+'@dcpproxy1.dcp.nycnet:8080'}
-
+path = '/Users/m_free/Desktop/GitHub/td-parking/waivers/'
 # path = 'C:/Users/M_Free/Desktop/td-parking/waivers/'
-path = '/Users/Work/Desktop/GitHub/td-parking/waivers/'
-
-bis_url = 'https://a810-bisweb.nyc.gov/bisweb/COsByLocationServlet?requestid=1&allbin='
-bin_num_df = pd.read_csv(path + 'output/for_co_test.csv', dtype = str)
 
 #%% Download CO PDFs
 
-bin_num = '3421378' #1 Clinton, Parking Spaces 
-
-s = Service(path + 'input/chromedriver')
-browser = webdriver.Chrome(service = s)
-browser.get(bis_url + bin_num)   
-time.sleep(7)
-soup = BeautifulSoup(browser.page_source, 'html.parser')
-browser.close()
-
-# create list of pdf file names
-filename_li = []
-filepattern = re.compile(r".*((\.pdf)|(\.PDF))$")
-for link in soup.find_all('a'):
-    if filepattern.match(link.text):
-        filename_li.append(link.text[:-4])
-
-def get_best_co(filenames):
+binum_df = pd.read_csv(path + 'output/for_co_waivers.csv', dtype = str)
+        
+def get_co_filenames(binum):  
     """ 
-    takes list of co file names
-    returns the final co or if not available, the latest temp co
+    This function takes a BIN to create a string query that accesses the
+    CO PDF listing for that property and returns a list of filenames.
+    
+    Note: BIS uses load balancer that shows a wait screen when traffic is
+    high and prevents data from being extracted with the requests module.
+    Selenium, however, can wait until the CO PDF listing page loads. 
+    """    
+    s = Service(path + 'input/chromedriver')
+    browser = webdriver.Chrome(service = s)
+    url = (f'https://a810-bisweb.nyc.gov/bisweb/COsByLocationServlet?'
+            f'requestid=1&allbin={binum}')
+    browser.get(url) 
+    
+    try: 
+        WebDriverWait(browser, 30).until(
+            EC.title_is('C of O PDF Listing for Property'))
+    finally:                                               
+        soup = BeautifulSoup(browser.page_source, 'html.parser')
+        browser.close()
+    
+    filenames = []
+    file_pattern = re.compile(r".*((\.pdf)|(\.PDF))$")
+    for link in soup.find_all('a'):
+        if file_pattern.match(link.text):
+            filenames.append(link.text[:-4])
+    
+    return filenames
+
+def get_best_co_filename(filenames):
+    """ 
+    This function takes a list of filenames and returns the name of the 
+    final CO (JobNumber.PDF, JobNumberF.PDF) or if not available, 
+    the most recent temporary CO (JobNumberDelimiterItemNumber.PDF) 
+    with the highest item number. 
     """
     filestoreturn = []
     jobitem_di = {}
@@ -64,8 +80,12 @@ def get_best_co(filenames):
             continue
         elif 'TCO' in link:
             splitby = 'TCO'
+        elif 'TOO' in link:
+            splitby = 'TOO'
         elif '-T-' in link:
             splitby = '-T-'
+        elif 'TT' in link:
+            splitby = 'TT'
         elif 'T' in link:
             splitby = 'T'
         elif '-' in link:
@@ -91,14 +111,11 @@ def get_best_co(filenames):
             filestoreturn.append(key + '-' + jobitem_di[key])
     
     return filestoreturn
-
-x = get_best_co(filename_li)      
-print(x)       
-
-def get_co_pdf(filename):
+    
+def get_co_url(filename):
     """ 
-    takes co file name
-    returns url with a pdf of the file
+    This function takes the best CO filename and returns a string query to
+    access a PDF of the file. 
     """
     boro_di = {'1': 'M',
                '2': 'X',
@@ -111,40 +128,156 @@ def get_co_pdf(filename):
     jobnum2 = filename[3:6] + '000'
     jobnum3 = filename 
 
-    url = f'https://a810-bisweb.nyc.gov/bisweb/CofoDocumentContentServlet?cofomatadata1=cofo&cofomatadata2={boro}&cofomatadata3={jobnum1}&cofomatadata4={jobnum2}&cofomatadata5={jobnum3}.PDF'
+    url = (f'https://a810-bisweb.nyc.gov/bisweb/CofoDocumentContentServlet?'
+            f'cofomatadata1=cofo&cofomatadata2={boro}&cofomatadata3={jobnum1}'
+            f'&cofomatadata4={jobnum2}&cofomatadata5={jobnum3}.PDF')
 
     return url
 
-url = get_co_pdf(x[0])
-print(url)
+def download_co_pdf(url, binum):
+    """ 
+    This function takes a BIN and a string query to access a PDF of that
+    property's CO and downloads the file to a folder. 
+   
+    Note: Python modules like requests or urllib couldn't read the online 
+    PDFs. Either a text extraction not allowed error would appear or the
+    code would "run" and never execute. As a workaround, this function runs 
+    a js file that reads the PDFs. 
+    """ 
+    node = '/usr/local/bin/node'
+    js = path + 'input/pdf-reader/index.js'
+    output = path + 'output/pdfs_waivers/' 
+    subprocess.Popen([node, js, url, binum, output]).wait(timeout = 30)
 
-node = '/usr/local/bin/node'
-js = path + 'input/pdf-reader/index.js'
-output = path + 'output/pdfs' 
+urls_df = pd.DataFrame(columns = ['bin', 'filename', 'url'])
+count = 0
 
-subprocess.Popen([node, js, url, bin_num, output]).wait()
-
-#%% Text Extraction
-
-file = extract_text(output + '/' + bin_num + '.pdf')
-
-results = pd.DataFrame(columns = ['bin', 'spaces'])
-
-def get_parking_spaces(textfile):
+for binum in binum_df[1757:]['bin']: #ended on index 1756, bin 3068624
+    filenames = get_co_filenames(binum)
+    filename = get_best_co_filename(filenames)
     
-    p1 = re.compile(r"Type and number of open spaces:\nParking spaces \((\d+)\)").search(file)
-    
-    if p1: 
-        spaces = p1.group(1)
+    if len(filename) != 0:        
+        filename = filename[0]
+        url = get_co_url(filename)
+        download_co_pdf(url, binum)
     else:
-        spaces = 'test'
-    return spaces
+        filename = 'no co'
+        url = 'no co'
+
+    urls_df = pd.concat([urls_df, 
+                         pd.DataFrame.from_records([{'bin': binum,
+                                                     'filename': filename,
+                                                     'url': url}])],
+                             ignore_index = True)
+    
+    count += 1
+    if count % 10 == 0:
+        print(f'progress: {count}')
+
+#%% Retry Bad PDF Downloads    
+  
+pdfs_path = path + 'output/pdfs_waivers/'
+
+for pdf in os.listdir(pdfs_path):
+    file = pdfs_path + pdf
+    size = os.path.getsize(file)
+    if size < 2000:
+        os.remove(file)
+        pdf = pdf.split('.', 1)[0]
+        url = urls_df.loc[urls_df['bin'] == pdf, 'url'].item()
+        download_co_pdf(url, pdf)
+
+#%% Extract Parking Spaces From PDFs
+    
+def get_text(pdf_path):
+    """ 
+    This function takes a path to a CO PDF and returns the file's text 
+    prepped for pattern searching. 
+    Note: Text2Num only converts "one" to 1 when it is part of a sequence.
+    Isolated it may be a pronoun, which is not relevant for this analysis.
+    """ 
+    text = extract_text(pdf_path) 
+    text = alpha2digit(text, 'en') 
+    text = text.lower().replace(' one ', '1') 
+    text = text.replace(' ','')
+    return text
+
+def get_potential_parking(text): 
+    """ 
+    This function takes text extracted from a CO PDF, searches for strings
+    that indicate there may be parking present and returns the number of 
+    COs that may have parking.
+    Note: Potential parking is an overcount, since it may capture bikes. 
+    """ 
+    parking_li = ['parking', 'garage', 'car', 'vehicle'] 
+
+    if any(x in text for x in parking_li):
+        parking = 1
+    else: 
+        parking = 0
+    return parking
+
+def get_parking_spaces(text):
+    """ 
+    This function takes text extracted from a CO PDF, searches for patterns
+    that indicate there's parking present and returns the number of spaces.
+    """ 
+    pattern_li = [r"typeandnumberofopenspaces:\nparkingspaces\((\d+)\)", # type and number of open spaces: parking spaces (#)
+                  r"parkingfor\((\d+)\)car", # parking for (#) car
+                  r"parkingfor(\d+)car",
+                  r"parkingfor\((\d+)\)vehicle", # parking for (#) vehicle
+                  r"parkingfor(\d+)vehicle",
+                  r"parkingfor\((\d+)\)motorvehicle", # parking for (#) motor vehicle
+                  r"parkingfor(\d+)motorvehicle",
+                  r"\((\d+)\)accessoryparkingspace", # (#) accessory parking space
+                  r"(\d+)accessoryparkingspace",
+                  r"\((\d+)\)offstreetparkingspace", # (#) off street parking space
+                  r"(\d+)offstreetparkingspace", 
+                  r"\((\d+)\)openparkingspace", # (#) open parking space
+                  r"(\d+)openparkingspace", 
+                  r"\((\d+)\)openspaceparking", # (#) open space parking
+                  r"(\d+)openspaceparking", 
+                  r"\((\d+)\)parkingspace", # (#) parking space, NEED TO IGNORE FOR BIKES
+                  r"(\d+)parkingspace",
+                  r"\((\d+)\)cargarage", # (#) car garage, ONE CAR GARAGE THREE PARKING SPACE
+                  r"(\d+)cargarage",
+                  r"(?<!(?:bicycle))parkingspaces\((\d+)\)", # parking spaces (#), NOT bicycle parking space/s
+                  r"(?<!(?:bicycle))parkingspaces(\d+)",
+                  r"(?<!(?:bicycle))parkingspace\((\d+)\)", # parking space (#), NOT bicycle parking space/s
+                  r"(?<!(?:bicycle))parkingspace(\d+)"]
+                               
+    spaces = float('nan')
+    num = float('nan')
+    for pattern in pattern_li:
+        p = re.compile(pattern).search(text)
+        if p: 
+            spaces = p.group(1)
+            num = pattern_li.index(pattern) 
+            break
+    
+    return spaces, num    
+
+pdfs_path = path + 'output/pdfs_waivers/'
+potential_parking = 0
+spaces_df = pd.DataFrame(columns = ['filename', 'bin', 'du', 'spaces', 'pattern'])
+bad_downloads_df = pd.DataFrame(columns = ['filename'])
+
+for pdf in os.listdir(pdfs_path):
+    try:
+        text = get_text(pdfs_path + pdf)
+        potential_parking += get_potential_parking(text)
+    
+        binum_pattern = re.compile(r"buildingidentificationnumber\(bin\):(\d+)").search(text)
+        du_pattern = re.compile(r"no\.ofdwellingunits:\n\n(\d+)").search(text)
         
-results = results.append({'bin': bin_num,
-                          'spaces': get_parking_spaces(file)},
-                         ignore_index = True)        
-
-
-# high demand 
-# no co 
-
+        spaces_df = pd.concat([spaces_df,
+                               pd.DataFrame.from_records([{'filename': pdf.split('.', 1)[0],
+                                                           'bin': binum_pattern.group(1),
+                                                           'du': du_pattern.group(1),
+                                                           'spaces': get_parking_spaces(text)[0],
+                                                           'pattern': get_parking_spaces(text)[1]}])],
+                              ignore_index = True) 
+    except: 
+        bad_downloads_df = pd.concat([bad_downloads_df,
+                                      pd.DataFrame.from_records([{'filename': pdf}])],
+                                     ignore_index = True)
