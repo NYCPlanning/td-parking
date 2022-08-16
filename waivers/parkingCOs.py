@@ -25,9 +25,9 @@ from pdfminer.high_level import extract_text
 from text_to_num import alpha2digit
 from tqdm import tqdm
 
-# path = '/Users/m_free/Desktop/GitHub/td-parking/waivers/'
+path = '/Users/m_free/Desktop/GitHub/td-parking/waivers/'
 # path = 'C:/Users/M_Free/Desktop/td-parking/waivers/'
-path = '/Users/Work/Desktop/GitHub/td-parking/waivers/'
+# path = '/Users/Work/Desktop/GitHub/td-parking/waivers/'
 
 #%% Create Helper Functions
         
@@ -40,8 +40,8 @@ def get_co_filenames(binum):
     high and prevents data from being extracted with the requests module.
     Selenium, however, can wait until the CO PDF listing page loads. 
     """    
-    # s = Service(path + 'input/chromedriver')
-    s = Service('/Users/Work/Desktop/GitHub/td-parking/waivers/input/chromedriver')
+    s = Service(path + 'input/chromedriver.exe')
+    # s = Service('/Users/Work/Desktop/GitHub/td-parking/waivers/input/chromedriver')
     browser = webdriver.Chrome(service = s)
     url = (f'https://a810-bisweb.nyc.gov/bisweb/COsByLocationServlet?'
             f'requestid=1&allbin={binum}')
@@ -172,7 +172,7 @@ def download_co_pdf(url, binum):
 #%% Download CO PDFs 
 
 binum_df = pd.read_csv(path + 'output/for_co_waivers.csv', dtype = str)
-binum_df = binum_df[1806:1816]
+binum_df = binum_df[2637:2817] #start at 1817
 urls_df = pd.DataFrame(columns = ['bin', 'filename', 'url'])
 
 for index, row in tqdm(binum_df.iterrows(), total = len(binum_df)): 
@@ -193,6 +193,8 @@ for index, row in tqdm(binum_df.iterrows(), total = len(binum_df)):
                                                      'url': url}])],
                         ignore_index = True)
 
+urls_df.to_csv(path + 'output/urls.csv')
+
 #%% Download CO PDFs - Single Project
 
 binum = '1087979'
@@ -212,9 +214,11 @@ pdfs_path = path + 'output/pdfs_waivers/'
 for pdf in os.listdir(pdfs_path):
     file = pdfs_path + pdf
     size = os.path.getsize(file)
-    if size < 2000:
+    
+    pdf = pdf.split('.', 1)[0]
+    
+    if (pdf in list(urls_df['bin'])) & (size < 2000):
         os.remove(file)
-        pdf = pdf.split('.', 1)[0]
         url = urls_df.loc[urls_df['bin'] == pdf, 'url'].item()
         download_co_pdf(url, pdf)
 
