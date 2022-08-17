@@ -13,12 +13,12 @@ import matplotlib.pyplot as plt
 import numpy as np 
 
 path = 'C:/Users/M_Free/Desktop/td-parking/waivers/'
-local_path = 'C:/Users/M_Free/OneDrive - NYC O365 HOSTED/Projects/Parking/Waivers/'
+local_path = 'C:/Users/M_Free/OneDrive - NYC O365 HOSTED/Projects/Parking/ParkingRates/Waivers/'
 
 #%% Effective Parking: Data Download
 
 # # import and filter housing database
-# hdb_df = pd.read_csv(local_path + 'HousingDB/HousingDB_post2010_completed_jobs.csv', dtype = str)
+# hdb_df = pd.read_csv(local_path + 'Input/HousingDB/HousingDB_post2010_completed_jobs.csv', dtype = str)
 # hdb_cond = (hdb_df['Job_Type'] == 'New Building') & (hdb_df['Job_Status'] == '5. Completed Construction') & (hdb_df['ClassAProp'] > '0')
 # hdb_df = hdb_df[hdb_cond]
 
