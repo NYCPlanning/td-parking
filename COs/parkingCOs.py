@@ -25,10 +25,8 @@ from pdfminer.high_level import extract_text
 from text_to_num import alpha2digit
 from tqdm import tqdm
 
-path = '/Users/m_free/Desktop/GitHub/td-parking/waivers/'
-# path = 'C:/Users/M_Free/Desktop/td-parking/waivers/'
-# path = '/Users/Work/Desktop/GitHub/td-parking/waivers/'
-
+path = '/Users/m_free/Desktop/GitHub/td-parking/COs/'
+waiver_path = '/Users/m_free/Desktop/GitHub/td-parking/waivers/output/for_co_waivers.csv'
 drive_path = '/Users/m_free/OneDrive - NYC O365 HOSTED/Projects/Parking/ParkingRates/COs/'
 
 #%% Create Helper Functions
@@ -43,7 +41,6 @@ def get_co_filenames(binum):
     Selenium, however, can wait until the CO PDF listing page loads. 
     """    
     s = Service(path + 'input/chromedriver.exe')
-    # s = Service('/Users/Work/Desktop/GitHub/td-parking/waivers/input/chromedriver')
     browser = webdriver.Chrome(service = s)
     url = (f'https://a810-bisweb.nyc.gov/bisweb/COsByLocationServlet?'
             f'requestid=1&allbin={binum}')
@@ -173,8 +170,9 @@ def download_co_pdf(url, binum):
     
 #%% Download CO PDFs 
 
-binum_df = pd.read_csv(path + 'output/for_co_waivers.csv', dtype = str)
-binum_df = binum_df[4831:4841]
+binum_df = pd.read_csv(waiver_path, dtype = str)
+binum_df = binum_df[4842:4846]
+
 # urls_df = pd.DataFrame(columns = ['bin', 'filename', 'url'])
 urls_df = pd.read_csv(path + 'output/urls.csv')
 
