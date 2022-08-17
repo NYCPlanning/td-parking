@@ -29,6 +29,8 @@ path = '/Users/m_free/Desktop/GitHub/td-parking/waivers/'
 # path = 'C:/Users/M_Free/Desktop/td-parking/waivers/'
 # path = '/Users/Work/Desktop/GitHub/td-parking/waivers/'
 
+drive_path = '/Users/m_free/OneDrive - NYC O365 HOSTED/Projects/Parking/ParkingRates/COs/'
+
 #%% Create Helper Functions
         
 def get_co_filenames(binum):  
@@ -162,7 +164,7 @@ def download_co_pdf(url, binum):
     """ 
     node = '/usr/local/bin/node'
     js = path + 'input/pdf-reader/index.js'
-    output = path + 'output/pdfs_waivers/' 
+    output = drive_path + 'pdfs_waivers/' 
     
     try:
         subprocess.Popen([node, js, url, binum, output]).wait(timeout = 30)
@@ -172,8 +174,9 @@ def download_co_pdf(url, binum):
 #%% Download CO PDFs 
 
 binum_df = pd.read_csv(path + 'output/for_co_waivers.csv', dtype = str)
-binum_df = binum_df[2637:2817] #start at 1817
-urls_df = pd.DataFrame(columns = ['bin', 'filename', 'url'])
+binum_df = binum_df[4831:4841]
+# urls_df = pd.DataFrame(columns = ['bin', 'filename', 'url'])
+urls_df = pd.read_csv(path + 'output/urls.csv')
 
 for index, row in tqdm(binum_df.iterrows(), total = len(binum_df)): 
     
@@ -193,7 +196,7 @@ for index, row in tqdm(binum_df.iterrows(), total = len(binum_df)):
                                                      'url': url}])],
                         ignore_index = True)
 
-urls_df.to_csv(path + 'output/urls.csv')
+# urls_df.to_csv(path + 'output/urls.csv', index = False)
 
 #%% Download CO PDFs - Single Project
 
@@ -209,7 +212,7 @@ download_co_pdf(url, binum)
 
 #%% Retry Bad PDF Downloads    
   
-pdfs_path = path + 'output/pdfs_waivers/'
+pdfs_path = drive_path + 'pdfs_waivers/' 
 
 for pdf in os.listdir(pdfs_path):
     file = pdfs_path + pdf
