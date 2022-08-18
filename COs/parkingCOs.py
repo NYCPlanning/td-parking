@@ -171,10 +171,10 @@ def download_co_pdf(url, binum):
 #%% Download CO PDFs 
 
 binum_df = pd.read_csv(waiver_path, dtype = str)
-binum_df = binum_df[4842:4846]
+binum_df = binum_df[5830:] #sart again at 5966
 
 # urls_df = pd.DataFrame(columns = ['bin', 'filename', 'url'])
-urls_df = pd.read_csv(path + 'output/urls.csv')
+# urls_df = pd.read_csv(path + 'output/urls.csv')
 
 for index, row in tqdm(binum_df.iterrows(), total = len(binum_df)): 
     
@@ -194,7 +194,7 @@ for index, row in tqdm(binum_df.iterrows(), total = len(binum_df)):
                                                      'url': url}])],
                         ignore_index = True)
 
-# urls_df.to_csv(path + 'output/urls.csv', index = False)
+urls_df.to_csv(path + 'output/urls.csv', index = False)
 
 #%% Download CO PDFs - Single Project
 
