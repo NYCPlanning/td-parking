@@ -171,10 +171,10 @@ def download_co_pdf(url, binum):
 #%% Download CO PDFs 
 
 binum_df = pd.read_csv(waiver_path, dtype = str)
-binum_df = binum_df[5830:] #sart again at 5966
+# binum_df = binum_df[6136:] 
 
 # urls_df = pd.DataFrame(columns = ['bin', 'filename', 'url'])
-# urls_df = pd.read_csv(path + 'output/urls.csv')
+urls_df = pd.read_csv(path + 'output/urls.csv')
 
 for index, row in tqdm(binum_df.iterrows(), total = len(binum_df)): 
     
@@ -218,7 +218,7 @@ for pdf in os.listdir(pdfs_path):
     
     pdf = pdf.split('.', 1)[0]
     
-    if (pdf in list(urls_df['bin'])) & (size < 2000):
+    if (pdf in list(urls_df['bin'])) & (size < 5000):
         os.remove(file)
         url = urls_df.loc[urls_df['bin'] == pdf, 'url'].item()
         download_co_pdf(url, pdf)
