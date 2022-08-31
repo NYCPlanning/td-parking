@@ -196,6 +196,56 @@ for index, row in tqdm(binum_df.iterrows(), total = len(binum_df)):
 
 urls_df.to_csv(path + 'output/urls.csv', index = False)
 
+#%%
+
+pdfs_path = drive_path + 'pdfs_waivers/' 
+retry_li = []
+binum_df = pd.read_csv(waiver_path, dtype = str)
+retry_urls = pd.DataFrame(columns = ['bin', 'filename', 'url'])
+
+for pdf in os.listdir(pdfs_path):
+    file = pdfs_path + pdf
+    size = os.path.getsize(file)
+    pdf = pdf.split('.', 1)[0]
+    
+    if size < 5000:
+        retry_li.append(pdf)
+        os.remove(file)
+
+retry_df = binum_df[binum_df['bin'].isin(retry_li)]    
+
+for index, row in tqdm(retry_df.iterrows(), total = len(retry_df)): 
+    
+    filenames = get_co_filenames(row['bin'])
+    best_filenames = get_best_co_filenames(filenames)
+    best_filename = get_best_co_filename_url(best_filenames, row['jobnum'])
+    
+    if (best_filename == 'no co') | (best_filename == 'diff job num'):
+        url = ''
+    else:
+        url = get_co_url(best_filename)
+        download_co_pdf(url, row['bin'] )
+
+    retry_urls = pd.concat([retry_urls, 
+                         pd.DataFrame.from_records([{'bin': row['bin'],
+                                                     'filename': best_filename,
+                                                     'url': url}])],
+                        ignore_index = True)
+    
+    
+for pdf in os.listdir(pdfs_path):
+    file = pdfs_path + pdf
+    size = os.path.getsize(file)
+    
+    pdf = pdf.split('.', 1)[0]
+    
+    if size < 5000:
+        os.remove(file)
+        url = retry_urls.loc[retry_urls['bin'] == pdf, 'url'].item()
+        download_co_pdf(url, pdf)
+
+retry_urls.to_csv(drive_path + 'retryurls.csv', index = False)
+
 #%% Download CO PDFs - Single Project
 
 binum = '1087979'
