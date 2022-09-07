@@ -26,7 +26,7 @@ from text_to_num import alpha2digit
 from tqdm import tqdm
 
 path = '/Users/m_free/Desktop/GitHub/td-parking/COs/'
-waiver_path = '/Users/m_free/Desktop/GitHub/td-parking/waivers/output/for_co_waivers.csv'
+remainder_path = '/Users/m_free/Desktop/GitHub/td-parking/waivers/output/for_co_remainder.csv'
 drive_path = '/Users/m_free/OneDrive - NYC O365 HOSTED/Projects/Parking/ParkingRates/COs/'
 
 #%% Create Helper Functions
@@ -161,7 +161,7 @@ def download_co_pdf(url, binum):
     """ 
     node = '/usr/local/bin/node'
     js = path + 'input/pdf-reader/index.js'
-    output = drive_path + 'pdfs_waivers/' 
+    output = drive_path + 'pdfs_remainder/' 
     
     try:
         subprocess.Popen([node, js, url, binum, output]).wait(timeout = 30)
@@ -170,11 +170,11 @@ def download_co_pdf(url, binum):
     
 #%% Download CO PDFs 
 
-binum_df = pd.read_csv(waiver_path, dtype = str)
-# binum_df = binum_df[6136:] 
+binum_df = pd.read_csv(remainder_path, dtype = str)
+binum_df = binum_df[2276:] 
 
 # urls_df = pd.DataFrame(columns = ['bin', 'filename', 'url'])
-urls_df = pd.read_csv(path + 'output/urls.csv')
+urls_df = pd.read_csv(path + 'output/urls_remainders.csv')
 
 for index, row in tqdm(binum_df.iterrows(), total = len(binum_df)): 
     
@@ -194,13 +194,13 @@ for index, row in tqdm(binum_df.iterrows(), total = len(binum_df)):
                                                      'url': url}])],
                         ignore_index = True)
 
-urls_df.to_csv(path + 'output/urls.csv', index = False)
+urls_df.to_csv(path + 'output/urls_remainders.csv', index = False)
 
 #%%
 
-pdfs_path = drive_path + 'pdfs_waivers/' 
+pdfs_path = drive_path + 'pdfs_remainder/' 
 retry_li = []
-binum_df = pd.read_csv(waiver_path, dtype = str)
+binum_df = pd.read_csv(remainder_path, dtype = str)
 retry_urls = pd.DataFrame(columns = ['bin', 'filename', 'url'])
 
 for pdf in os.listdir(pdfs_path):
@@ -260,7 +260,7 @@ download_co_pdf(url, binum)
 
 #%% Retry Bad PDF Downloads    
   
-pdfs_path = drive_path + 'pdfs_waivers/' 
+pdfs_path = drive_path + 'pdfs_remainder/' 
 
 for pdf in os.listdir(pdfs_path):
     file = pdfs_path + pdf
